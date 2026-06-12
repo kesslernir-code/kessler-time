@@ -14,6 +14,7 @@
       tomorrow: "מחר",
       weekend: "סופ״ש",
       allDays: "כל הימים",
+      pickDate: "תאריך",
       empty: "אין אירועים שמתאימים לסינון",
       notConfigured: "האתר עוד לא מחובר למסד הנתונים.\n(צריך למלא את web/config.js)",
       error: "שגיאה בטעינת אירועים",
@@ -36,6 +37,7 @@
       tomorrow: "Tomorrow",
       weekend: "Weekend",
       allDays: "All days",
+      pickDate: "Date",
       empty: "No events match the filter",
       notConfigured: "Site is not connected to the database yet.\n(web/config.js needs to be filled in)",
       error: "Failed to load events",
@@ -309,15 +311,29 @@
       b.onclick = () => { dateFilter = val; renderDateChips(); render(); };
       wrap.appendChild(b);
     }
+    // A clean 📅 chip that opens the native calendar — the bare <input type=date>
+    // renders badly on phones. The actual input stays hidden.
+    const isDate = /^\d{4}/.test(dateFilter);
     const picker = document.createElement("input");
     picker.type = "date";
-    picker.className = "chip date-pick" + (/^\d{4}/.test(dateFilter) ? " on" : "");
+    picker.className = "date-hidden";
     picker.min = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
-    if (/^\d{4}/.test(dateFilter)) picker.value = dateFilter;
+    if (isDate) picker.value = dateFilter;
     picker.onchange = () => {
       dateFilter = picker.value || "all";
       renderDateChips(); render();
     };
+    const btn = document.createElement("button");
+    btn.className = "chip" + (isDate ? " on" : "");
+    btn.textContent =
+      "📅 " +
+      (isDate
+        ? new Date(dateFilter + "T12:00:00").toLocaleDateString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" })
+        : t("pickDate"));
+    btn.onclick = () => {
+      try { picker.showPicker(); } catch { picker.focus(); picker.click(); }
+    };
+    wrap.appendChild(btn);
     wrap.appendChild(picker);
   }
 
