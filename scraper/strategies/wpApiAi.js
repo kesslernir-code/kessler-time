@@ -17,7 +17,12 @@ export async function scrape(source) {
   );
 
   const known = await knownEventUrls(source.id);
-  const fresh = items.filter((it) => !known.has(it.link));
+  // Skip announcements older than 60 days: venues announce shortly before the
+  // event, and without this every run re-sends long-past posts to Claude.
+  const cutoff = Date.now() - 60 * 864e5;
+  const fresh = items.filter(
+    (it) => !known.has(it.link) && Date.parse((it.date_gmt || it.date) + "Z") > cutoff
+  );
   if (!fresh.length) return [];
   if (!aiConfigured()) throw new Error("ANTHROPIC_API_KEY missing — this source needs AI date extraction");
 
