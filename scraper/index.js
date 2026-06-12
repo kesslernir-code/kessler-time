@@ -55,6 +55,8 @@ function normalize(raw, source) {
       ends_at: e.endsAt || null,
       venue: source.venue,
       city: source.city,
+      // present only once the DB has the category column (sources row carries it)
+      category: source.category || undefined,
       price_text: e.priceText || null,
       is_free: e.isFree ?? null,
       booking_url: e.bookingUrl || null,

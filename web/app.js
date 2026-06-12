@@ -21,6 +21,10 @@
       tickets: "כרטיסים",
       recs: "המלצות",
       addPlace: "+ הוספת מקום",
+      cat_fringe: "אירועי שוליים",
+      cat_club: "מועדונים",
+      cat_mainstream: "מיינסטרים",
+      cat_festival: "פסטיבלים",
     },
     en: {
       tagline: "Upcoming events from the places we love",
@@ -39,6 +43,10 @@
       tickets: "Tickets",
       recs: "Recommendations",
       addPlace: "+ Add place",
+      cat_fringe: "Fringe",
+      cat_club: "Clubs",
+      cat_mainstream: "Mainstream",
+      cat_festival: "Festivals",
     },
   };
   let lang = localStorage.getItem("kt-lang") || "he";
@@ -60,6 +68,8 @@
   let query = "";
   let dateFilter = "all"; // "all" | "today" | "tomorrow" | "weekend" | "YYYY-MM-DD"
   let activeCity = "all";
+  let activeCat = "all";
+  const CATEGORIES = ["fringe", "club", "mainstream", "festival"];
 
   // Venue sites often block hotlinked images (and serve huge files); the wsrv.nl
   // proxy fetches them neutrally and resizes — one fix for every problematic site.
@@ -96,15 +106,18 @@
       return;
     }
     const since = new Date(Date.now() - 3 * 3600e3).toISOString();
-    const url =
-      `${CFG.SUPABASE_URL}/rest/v1/events` +
-      `?select=id,source_id,title,description,starts_at,venue,city,price_text,is_free,booking_url,event_url,image_url` +
+    const cols = "id,source_id,title,description,starts_at,venue,city,price_text,is_free,booking_url,event_url,image_url";
+    const url = (extra) =>
+      `${CFG.SUPABASE_URL}/rest/v1/events?select=${cols}${extra}` +
       `&starts_at=gte.${encodeURIComponent(since)}&order=starts_at.asc&limit=600`;
     try {
-      const res = await fetch(url, { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
+      // ",category" gracefully degrades while the DB column doesn't exist yet
+      let res = await fetch(url(",category"), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
+      if (!res.ok) res = await fetch(url(""), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) throw new Error(res.status);
       events = await res.json();
       renderCityChips();
+      renderCatChips();
       render();
     } catch (e) {
       $("#stateMsg").textContent = `${t("error")} (${e.message})`;
@@ -192,6 +205,7 @@
       (e) =>
         (activeSource === "all" || e.source_id === activeSource) &&
         (activeCity === "all" || e.city === activeCity) &&
+        (activeCat === "all" || (e.category || "fringe") === activeCat) &&
         (!freeOnly || e.is_free) &&
         (!days || days.includes(dayKey(e.starts_at))) &&
         (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q))
@@ -226,6 +240,21 @@
       b.className = "chip" + (activeSource === id ? " on" : "");
       b.textContent = id === "all" ? t("all") : SOURCES[id][lang];
       b.onclick = () => { activeSource = id; renderChips(); render(); };
+      wrap.appendChild(b);
+    }
+  }
+
+  // Place-category filter (fringe/club/mainstream/festival) — shown once the
+  // category column exists in the data.
+  function renderCatChips() {
+    const wrap = $("#catChips");
+    wrap.innerHTML = "";
+    if (!events.some((e) => "category" in e)) return;
+    for (const c of ["all", ...CATEGORIES]) {
+      const b = document.createElement("button");
+      b.className = "chip" + (activeCat === c ? " on" : "");
+      b.textContent = c === "all" ? t("all") : t("cat_" + c);
+      b.onclick = () => { activeCat = c; renderCatChips(); render(); };
       wrap.appendChild(b);
     }
   }
@@ -273,7 +302,7 @@
   $("#langToggle").onclick = () => {
     lang = lang === "he" ? "en" : "he";
     localStorage.setItem("kt-lang", lang);
-    applyLang(); renderChips(); renderCityChips(); renderDateChips(); render();
+    applyLang(); renderChips(); renderCatChips(); renderCityChips(); renderDateChips(); render();
   };
   $("#freeOnly").onchange = (e) => { freeOnly = e.target.checked; render(); };
   $("#search").oninput = (e) => { query = e.target.value; render(); };
