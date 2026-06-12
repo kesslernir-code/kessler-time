@@ -1,0 +1,15 @@
+{
+  "name": "kessler-time",
+  "version": "1.0.0",
+  "description": "Personal Tel Aviv / Israel events page — scrapes followed sites into Supabase, served on GitHub Pages",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "scrape": "node scraper/index.js",
+    "scrape:dry": "node scraper/index.js --dry-run",
+    "serve": "node web/dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kessler Time — scrape status</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top"><h1 class="logo">Scrape<span>Status</span></h1><a class="lang-btn" href="index.html">← events</a></header>
+  <div id="out" class="state">loading…</div>
+  <script src="config.js"></script>
+  <script>
+    (async () => {
+      const C = window.KESSLER_CONFIG, out = document.getElementById("out");
+      if (!C.SUPABASE_URL) { out.textContent = "config.js not filled in"; return; }
+      try {
+        const res = await fetch(`${C.SUPABASE_URL}/rest/v1/scrape_runs?select=*&order=started_at.desc&limit=60`,
+          { headers: { apikey: C.SUPABASE_ANON_KEY } });
+        const runs = await res.json();
+        if (!runs.length) { out.textContent = "no runs logged yet"; return; }
+        const rows = runs.map(r => `<tr>
+          <td>${r.source_id}</td>
+          <td class="${r.ok ? "ok" : "fail"}">${r.ok ? "✓ ok" : "✗ failed"}</td>
+          <td>${r.strategy || ""}</td>
+          <td>${r.events_upserted ?? ""}</td>
+          <td>${new Date(r.started_at).toLocaleString("en-GB", { timeZone: "Asia/Jerusalem" })}</td>
+          <td>${(r.duration_ms / 1000).toFixed(1)}s</td>
+          <td style="max-width:380px">${r.error ? r.error.slice(0, 200) : ""}</td>
+        </tr>`).join("");
+        out.outerHTML = `<table class="status">
+          <tr><th>source</th><th>result</th><th>strategy</th><th>events</th><th>when (IL)</th><th>took</th><th>error</th></tr>
+          ${rows}</table>`;
+      } catch (e) { out.textContent = "error: " + e.message; }
+    })();
+  </script>
+</body>
+</html>
