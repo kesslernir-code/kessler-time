@@ -13,19 +13,33 @@ export const name = "listing-detail-ai";
 const ilDateOf = (epochSec) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(epochSec * 1000));
 
+// Template images (logos, icons, sponsors) must never become an event poster
+const IMG_BLACKLIST = /logo|icon|favicon|placeholder|blank|spinner|loading|sponsor|footer|header/i;
+const IMG_SRC = /(?:data-lazy-src|data-src|src)="\s*(https?:\/\/[^"\s]+\.(?:jpe?g|png|webp)[^"\s]*)"/g;
+
+/** Poster candidate printed on the listing just before this event's link. */
+function listingImageNear(listing, linkRaw) {
+  const idx = listing.indexOf(linkRaw);
+  if (idx === -1) return null;
+  const seg = listing.slice(Math.max(0, idx - 2200), idx);
+  const imgs = [...seg.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u));
+  return imgs.pop() || null; // nearest one above the link
+}
+
 export async function scrape(source, log = console.error) {
   const listing = await fetchText(source.url);
   const base = new URL(source.url).origin;
 
-  // Collect event links (+ sd date hint when present), newest occurrence wins
-  const found = new Map(); // cleanUrl -> { sd }
+  // Collect event links (+ sd date hint and nearby poster), newest occurrence wins
+  const found = new Map(); // cleanUrl -> { sd, listImg }
   for (const m of listing.matchAll(/href="(https?:\/\/[^"]*\/event[^"]*)"/g)) {
     const raw = decodeEntities(m[1]);
     if (!raw.startsWith(base)) continue;
     const u = new URL(raw);
     const sd = Number(u.searchParams.get("sd")) || null;
     const clean = u.origin + u.pathname;
-    if (!found.has(clean) || sd) found.set(clean, { sd: found.get(clean)?.sd || sd });
+    const prev = found.get(clean) || {};
+    found.set(clean, { sd: prev.sd || sd, listImg: prev.listImg || listingImageNear(listing, m[1]) });
   }
   log(`  [${source.id}] listing links: ${found.size}`);
 
@@ -36,7 +50,7 @@ export async function scrape(source, log = console.error) {
 
   // Fetch each new detail page (politely)
   const details = [];
-  for (const [url, { sd }] of fresh) {
+  for (const [url, { sd, listImg }] of fresh) {
     try {
       const html = await fetchText(url, { retries: 0, timeoutMs: 20000 });
       // decode FIRST so "&#8211;" becomes "–" before we split the site-name suffix off
@@ -44,15 +58,22 @@ export async function scrape(source, log = console.error) {
         .split(/[–|]/)[0]
         .trim();
       details.push({
-        url, sd, html, title,
+        url, sd, html, title, listImg,
         text: stripHtml(html).slice(0, 1400),
-        image: html.match(/src="(https?:\/\/[^"]*\/wp-content\/uploads\/[^"]+\.(?:jpe?g|png|webp)[^"]*)"/)?.[1] || null,
+        detailImgs: [...html.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u)),
       });
       await new Promise((r) => setTimeout(r, 250));
     } catch (e) {
       log(`  [${source.id}] detail fetch failed: ${url} (${e.message})`);
     }
   }
+
+  // An image appearing on many detail pages is site template (logo, sponsors) —
+  // never an event poster. The listing's per-event poster always wins.
+  const freq = new Map();
+  for (const d of details) for (const u of new Set(d.detailImgs)) freq.set(u, (freq.get(u) || 0) + 1);
+  const isCommon = (u) => details.length >= 3 && (freq.get(u) || 0) > details.length * 0.4;
+  for (const d of details) d.image = d.listImg || d.detailImgs.find((u) => !isCommon(u)) || null;
 
   // Short numeric keys + chunks of 20 keep each Claude response well under its size limit
   const fields = new Map();

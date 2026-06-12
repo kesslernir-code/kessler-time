@@ -84,6 +84,7 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
   background: var(--panel); border-radius: var(--radius); overflow: hidden;
   border: 1px solid #242837; display: flex; flex-direction: column;
   text-decoration: none; color: inherit; transition: transform .15s, border-color .15s;
+  cursor: pointer;
 }
 .card:hover { transform: translateY(-3px); border-color: var(--accent-2); }
 /* Fixed square media box: absolute-positioned content can't stretch it, so
@@ -112,8 +113,14 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .meta .venue { color: var(--accent-2); }
-.price { margin-top: auto; font-size: 14px; color: var(--text); }
+.price-row { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.price { font-size: 14px; color: var(--text); }
 .price.free { color: var(--free); font-weight: 600; }
+.tix {
+  background: var(--accent); color: #14130c; text-decoration: none; font-size: 12.5px;
+  font-weight: 700; padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+}
+.tix:hover { filter: brightness(1.1); }
 
 .state { color: var(--muted); text-align: center; padding: 60px 0; font-size: 16px; white-space: pre-line; }
 

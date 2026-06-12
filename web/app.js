@@ -76,6 +76,16 @@
   const proxyImg = (url) =>
     `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=640&h=640&fit=cover&output=webp&q=78`;
 
+  // Header photo rotates daily, cycling through web/pics/ in order
+  fetch("pics/manifest.json")
+    .then((r) => r.json())
+    .then((m) => {
+      if (!m.count) return;
+      const day = Math.floor(Date.now() / 864e5);
+      $("#heroImg").src = "pics/" + m.files[day % m.count];
+    })
+    .catch(() => {});
+
   // Source labels load from the DB so sites added via admin.html get a chip
   // automatically. A bilingual name like "Radical רדיקל" is split per language.
   let SOURCES = {};
@@ -88,12 +98,14 @@
     if (!configured) return;
     try {
       const res = await fetch(
-        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name&order=added_at.asc`,
+        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name,category&order=added_at.asc`,
         { headers: { apikey: CFG.SUPABASE_ANON_KEY } }
       );
       const rows = await res.json();
       if (Array.isArray(rows) && rows.length) {
-        SOURCES = Object.fromEntries(rows.map((r) => [r.id, splitName(r.name)]));
+        SOURCES = Object.fromEntries(
+          rows.map((r) => [r.id, { ...splitName(r.name), category: r.category || "fringe" }])
+        );
         renderChips();
       }
     } catch {} // chips just stay minimal if the sources table is unreachable
@@ -146,20 +158,24 @@
   const hue = (s) => PALETTE[[...s].reduce((a, c) => a + c.codePointAt(0), 0) % PALETTE.length];
 
   function card(e) {
-    const a = document.createElement("a");
+    // Card click -> the event's own page; a separate 🎟 button -> the payment page.
+    // (A div with a click handler — an <a> can't legally nest the ticket <a>.)
+    const pageUrl = e.event_url || e.booking_url || "#";
+    const ticketUrl = e.booking_url && e.booking_url !== e.event_url ? e.booking_url : null;
+    const a = document.createElement("div");
     a.className = "card";
-    a.href = e.booking_url || e.event_url || "#";
-    a.target = "_blank";
-    a.rel = "noopener";
+    a.setAttribute("role", "link");
+    a.tabIndex = 0;
+    const open = () => window.open(pageUrl, "_blank", "noopener");
+    a.addEventListener("click", open);
+    a.addEventListener("keydown", (ev) => { if (ev.key === "Enter") open(); });
     const img = e.image_url
       ? `<img loading="lazy" src="${proxyImg(e.image_url)}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(e.title)}33>${(e.title || "?")[0]}</div>'">`
       : `<div class="ph" style="background:${hue(e.title)}33">${(e.title || "?")[0]}</div>`;
     const freeBadge = e.is_free ? `<span class="badge free">${t("free")}</span>` : "";
-    const price = e.is_free
-      ? `<div class="price free">${t("free")}</div>`
-      : e.price_text
-        ? `<div class="price">${e.price_text}</div>`
-        : "";
+    const priceTxt = e.is_free ? `<span class="price free">${t("free")}</span>` : e.price_text ? `<span class="price">${e.price_text}</span>` : "<span></span>";
+    const tixBtn = ticketUrl ? `<a class="tix" href="${ticketUrl}" target="_blank" rel="noopener">🎟 ${t("tickets")}</a>` : "";
+    const price = `<div class="price-row">${priceTxt}${tixBtn}</div>`;
     const src = SOURCES[e.source_id]?.[lang] || e.venue || e.source_id;
     a.innerHTML = `
       <div class="img">${img}<span class="badge">${timeOf(e.starts_at)}</span>${freeBadge}</div>
@@ -173,6 +189,8 @@
     const desc = a.querySelector(".desc");
     if (e.description) desc.textContent = e.description;
     else desc.remove();
+    // ticket button is a link of its own — don't trigger the card's link
+    a.querySelector(".tix")?.addEventListener("click", (ev) => ev.stopPropagation());
     return a;
   }
 
@@ -232,10 +250,15 @@
     }
   }
 
+  // Place chips cascade from the category filter: hidden on "all" (too many
+  // places to list), shown per chosen category with only its places.
   function renderChips() {
     const wrap = $("#sourceChips");
     wrap.innerHTML = "";
-    for (const id of ["all", ...Object.keys(SOURCES)]) {
+    if (activeCat === "all") return;
+    const ids = Object.keys(SOURCES).filter((id) => SOURCES[id].category === activeCat);
+    if (!ids.length) return;
+    for (const id of ["all", ...ids]) {
       const b = document.createElement("button");
       b.className = "chip" + (activeSource === id ? " on" : "");
       b.textContent = id === "all" ? t("all") : SOURCES[id][lang];
@@ -254,7 +277,7 @@
       const b = document.createElement("button");
       b.className = "chip" + (activeCat === c ? " on" : "");
       b.textContent = c === "all" ? t("all") : t("cat_" + c);
-      b.onclick = () => { activeCat = c; renderCatChips(); render(); };
+      b.onclick = () => { activeCat = c; activeSource = "all"; renderCatChips(); renderChips(); render(); };
       wrap.appendChild(b);
     }
   }
