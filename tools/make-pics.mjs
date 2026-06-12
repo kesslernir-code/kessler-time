@@ -18,7 +18,7 @@ for (const [i, name] of photos.entries()) {
   try {
     await sharp(`${SRC}/${name}`)
       .rotate() // honor EXIF orientation
-      .resize(1600, 600, { fit: "cover", position: "attention" })
+      .resize(1600, 600, { fit: "cover", position: "top" }) // faces live in the top part of selfies
       .webp({ quality: 78 })
       .toFile(`${OUT}/${out}`);
     files.push(out);
