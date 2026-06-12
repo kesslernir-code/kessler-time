@@ -17,7 +17,8 @@ async function rest(path, init = {}) {
   if (!res.ok) {
     throw new Error(`Supabase ${init.method || "GET"} ${path} -> ${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
-  return res.status === 204 ? null : res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null; // 201/204 success responses have an empty body
 }
 
 /** Upsert by id. first_seen_at is intentionally absent so it survives updates. */
