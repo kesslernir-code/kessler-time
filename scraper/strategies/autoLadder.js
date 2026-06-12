@@ -47,19 +47,11 @@ function looksLikeJsShell(html) {
 }
 
 async function renderWithPuppeteer(url) {
-  let puppeteer;
   try {
-    puppeteer = (await import("puppeteer")).default; // optional dep — only if installed
-  } catch {
-    return null;
-  }
-  const browser = await puppeteer.launch({ args: ["--no-sandbox"] });
-  try {
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-    return await page.content();
-  } finally {
-    await browser.close();
+    const { renderPage } = await import("../lib/render.js");
+    return (await renderPage(url, { timeoutMs: 60000 })).html;
+  } catch (e) {
+    return null; // no Chrome available — stay on the non-rendered rungs
   }
 }
 

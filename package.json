@@ -14,5 +14,8 @@
   },
   "devDependencies": {
     "sharp": "^0.35.1"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.1.0"
   }
 }

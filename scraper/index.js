@@ -3,7 +3,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
 import { shortHash, jerusalemOffset, canonTitle } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun, getSources } from "./lib/db.js";
+import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent } from "./lib/db.js";
+import { enrichPrices } from "./lib/enrichPrice.js";
+import { closeBrowser } from "./lib/render.js";
 import * as wpEventsApi from "./strategies/wpEventsApi.js";
 import * as radicalCalendar from "./strategies/radicalCalendar.js";
 import * as wpApiAi from "./strategies/wpApiAi.js";
@@ -90,6 +92,7 @@ for (const source of sources) {
     if (!strategy) throw new Error(`unknown strategy "${source.strategy}"`);
     const raw = await strategy.scrape(source);
     const events = normalize(raw, source);
+    await enrichPrices(events); // fills prices from ticket pages when the venue page omits them
     run.events_found = raw.length;
     run.events_upserted = events.length;
 
@@ -118,6 +121,29 @@ for (const source of sources) {
   run.duration_ms = Date.now() - t0;
   if (!DRY) await logRun(run).catch((e) => console.error(`logRun failed: ${e.message}`));
 }
+
+// Backfill pass: stored events that still lack a price (e.g. saved before
+// enrichment existed, or past a run's render cap) converge over the next runs.
+if (!DRY && !only) {
+  try {
+    const missing = await eventsMissingPrice(25);
+    if (missing.length) {
+      await enrichPrices(missing);
+      let updated = 0;
+      for (const e of missing) {
+        if (e.price_text || e.is_free != null) {
+          await updateEvent(e.id, { price_text: e.price_text, is_free: e.is_free });
+          updated++;
+        }
+      }
+      console.error(`price backfill: ${updated}/${missing.length} events updated`);
+    }
+  } catch (e) {
+    console.error(`price backfill failed: ${e.message}`);
+  }
+}
+
+await closeBrowser();
 
 if (failures) {
   console.error(`\n${failures} source(s) failed`);

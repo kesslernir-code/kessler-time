@@ -51,6 +51,23 @@ export async function getSources() {
   }
 }
 
+/** Upcoming events still missing price info but having a booking link. */
+export async function eventsMissingPrice(limit = 25) {
+  if (!dbConfigured()) return [];
+  const now = encodeURIComponent(new Date().toISOString());
+  return rest(
+    `events?price_text=is.null&is_free=is.null&booking_url=not.is.null&starts_at=gte.${now}&select=id,booking_url,price_text,is_free&limit=${limit}`
+  );
+}
+
+export async function updateEvent(id, patch) {
+  await rest(`events?id=eq.${id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function logRun(run) {
   if (!dbConfigured()) return;
   await rest("scrape_runs", {
