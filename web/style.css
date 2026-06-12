@@ -41,8 +41,8 @@ body {
 .logo span { color: var(--accent); }
 
 .hero { border-radius: var(--radius); overflow: hidden; margin: 14px 0 4px; border: 1px solid #242837; }
-.hero img { width: 100%; height: 190px; object-fit: cover; object-position: 50% 32%; display: block; }
-@media (min-width: 700px) { .hero img { height: 240px; } }
+.hero img { width: 100%; height: 200px; object-fit: cover; object-position: 50% 62%; display: block; }
+@media (min-width: 700px) { .hero img { height: 290px; } }
 .lang-btn {
   background: var(--panel); color: var(--text); border: 1px solid #2c3040;
   border-radius: 999px; padding: 6px 14px; font: inherit; cursor: pointer;
