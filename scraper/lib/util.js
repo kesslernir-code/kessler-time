@@ -72,6 +72,15 @@ export function reconcilePrice(priceText, isFreeHint) {
   return { priceText: text || null, isFree };
 }
 
+/** Canonical form of a title for dedup: lowercased, punctuation and extra spaces stripped. */
+export function canonTitle(s = "") {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** First link to a known ticketing platform inside raw HTML, or null. */
 export function findTicketLink(html = "") {
   const m = html.match(

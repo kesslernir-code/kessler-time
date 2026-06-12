@@ -2,7 +2,7 @@
 // Usage: node scraper/index.js [--dry-run] [--source=<id>]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
-import { shortHash, jerusalemOffset } from "./lib/util.js";
+import { shortHash, jerusalemOffset, canonTitle } from "./lib/util.js";
 import { dbConfigured, upsertEvents, logRun, getSources } from "./lib/db.js";
 import * as wpEventsApi from "./strategies/wpEventsApi.js";
 import * as radicalCalendar from "./strategies/radicalCalendar.js";
@@ -20,17 +20,32 @@ const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run") || !dbConfigured();
 const only = args.find((a) => a.startsWith("--source="))?.split("=")[1];
 
-/** Strategy output -> events table row. Drops past events and obvious garbage. */
+const ilDay = (iso) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(iso));
+
+/** Roughly "how much do we know about this event" — used to pick the best duplicate. */
+const completeness = (e) =>
+  (e.booking_url && e.booking_url !== e.event_url ? 4 : 0) +
+  (e.price_text ? 2 : 0) +
+  (e.image_url ? 1 : 0) +
+  (e.description ? 1 : 0);
+
+/**
+ * Strategy output -> events table row. Drops past events and obvious garbage.
+ * The id is a fingerprint of title+day, so the same event announced in several
+ * posts (or re-scraped tomorrow) collapses into one row; the most complete
+ * duplicate wins.
+ */
 function normalize(raw, source) {
-  const out = [];
+  const byId = new Map();
   const cutoff = Date.now() - 3 * 3600_000; // keep events started <3h ago
   for (const e of raw) {
     const startsAt = e.startsAt ?? (e.localDateTime ? e.localDateTime + jerusalemOffset(new Date(e.localDateTime)) : null);
     if (!e.title || !startsAt) continue;
     const t = Date.parse(startsAt);
     if (Number.isNaN(t) || t < cutoff || t > Date.now() + 400 * 864e5) continue;
-    out.push({
-      id: `${source.id}_${shortHash(e.occurrenceKey || e.title + startsAt)}`,
+    const row = {
+      id: `${source.id}_${shortHash(canonTitle(e.title) + "_" + ilDay(startsAt))}`,
       source_id: source.id,
       title: e.title.slice(0, 300),
       description: e.description || null,
@@ -45,9 +60,11 @@ function normalize(raw, source) {
       image_url: e.imageUrl || null,
       lang: e.lang || "he",
       confidence: e.confidence ?? 0.7,
-    });
+    };
+    const existing = byId.get(row.id);
+    if (!existing || completeness(row) > completeness(existing)) byId.set(row.id, row);
   }
-  return out;
+  return [...byId.values()];
 }
 
 if (DRY) console.error(dbConfigured() ? "-- DRY RUN --" : "-- DRY RUN (no SUPABASE_URL configured) --");
