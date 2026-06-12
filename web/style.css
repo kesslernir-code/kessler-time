@@ -39,6 +39,9 @@ body {
   padding: 6px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px;
 }
 .chip.on { background: var(--accent); color: #14130c; border-color: var(--accent); font-weight: 600; }
+input.date-pick { color-scheme: dark; }
+input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: var(--accent-2); font-weight: 600; }
+#dateChips .chip { font-size: 13px; padding: 5px 12px; }
 .row2 { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .free-toggle { color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .free-toggle input { accent-color: var(--free); width: 16px; height: 16px; }

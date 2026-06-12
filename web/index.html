@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kessler Time — אירועים</title>
   <meta name="description" content="האירועים הקרובים מהמקומות שאנחנו עוקבים אחריהם" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0e0f13" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kessler" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -21,6 +28,7 @@
 
   <nav class="filters">
     <div class="chips" id="sourceChips"></div>
+    <div class="chips" id="dateChips"></div>
     <div class="row2">
       <label class="free-toggle"><input type="checkbox" id="freeOnly" /> <span data-i18n="freeOnly"></span></label>
       <input type="search" id="search" class="search" />

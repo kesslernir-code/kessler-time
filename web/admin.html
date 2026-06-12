@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kessler Time — admin</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .panel { background: var(--panel); border: 1px solid #2c3040; border-radius: var(--radius); padding: 18px; margin-top: 18px; }
+    .panel h2 { margin: 0 0 12px; font-size: 17px; }
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .field label { color: var(--muted); font-size: 13px; }
+    .field input { background: var(--panel-2); border: 1px solid #2c3040; color: var(--text); border-radius: 8px; padding: 9px 12px; font: inherit; }
+    .btn { background: var(--accent); color: #14130c; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+    .btn:disabled { opacity: .5; }
+    #msg { margin-top: 10px; font-size: 14px; min-height: 20px; }
+    .src-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #242837; font-size: 14px; }
+    .src-row:last-child { border: none; }
+    .src-row .grow { flex: 1; }
+    .src-row a { color: var(--accent-2); text-decoration: none; }
+    .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+    .mini { background: var(--panel-2); color: var(--text); border: 1px solid #2c3040; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header class="top"><h1 class="logo">Kessler<span>Admin</span></h1><a class="lang-btn" href="index.html">← events</a></header>
+
+  <div class="panel">
+    <h2>Add a site to follow</h2>
+    <div class="field"><label>Site name (e.g. "Levontin 7")</label><input id="fName" /></div>
+    <div class="field"><label>Events page URL (the page that lists the events)</label><input id="fUrl" placeholder="https://..." /></div>
+    <div class="field"><label>Venue display name (optional — shown on event cards)</label><input id="fVenue" /></div>
+    <div class="field"><label>City (optional)</label><input id="fCity" /></div>
+    <div class="field"><label>Admin password</label><input id="fPass" type="password" /></div>
+    <button class="btn" id="addBtn">Add site</button>
+    <div id="msg"></div>
+    <p style="color:var(--muted);font-size:13px">
+      New sites use the automatic extraction ladder (structured data → AI). Events appear
+      after the next scheduled scan (3×/day), or trigger one now from
+      <a style="color:var(--accent-2)" href="https://github.com/kesslernir-code/kessler-time/actions/workflows/scrape.yml">GitHub Actions → Run workflow</a>.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Current sources</h2>
+    <div id="srcList" class="state">loading…</div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const C = window.KESSLER_CONFIG;
+    const $ = (s) => document.querySelector(s);
+    $("#fPass").value = localStorage.getItem("kt-admin") || "";
+
+    const slugify = (url) => {
+      try { return new URL(url).hostname.replace(/^www\./, "").split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30); }
+      catch { return ""; }
+    };
+
+    async function rpc(fn, args) {
+      const res = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: { apikey: C.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      return res.json();
+    }
+
+    $("#addBtn").onclick = async () => {
+      const name = $("#fName").value.trim(), url = $("#fUrl").value.trim(), pass = $("#fPass").value;
+      const msg = $("#msg");
+      if (!name || !url || !pass) { msg.textContent = "name, URL and password are required"; msg.style.color = "#ff7a7a"; return; }
+      const id = slugify(url);
+      if (!id) { msg.textContent = "that URL doesn't look valid"; msg.style.color = "#ff7a7a"; return; }
+      $("#addBtn").disabled = true;
+      try {
+        const out = await rpc("add_source", { secret: pass, p_id: id, p_name: name, p_url: url, p_venue: $("#fVenue").value.trim(), p_city: $("#fCity").value.trim() });
+        if (out === "ok") {
+          localStorage.setItem("kt-admin", pass);
+          msg.textContent = `✓ added as "${id}" — events will appear after the next scan`;
+          msg.style.color = "var(--free)";
+          $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = "";
+          loadSources();
+        } else {
+          msg.textContent = typeof out === "string" ? out : (out.message || JSON.stringify(out));
+          msg.style.color = "#ff7a7a";
+        }
+      } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
+      $("#addBtn").disabled = false;
+    };
+
+    async function loadSources() {
+      const el = $("#srcList");
+      try {
+        const res = await fetch(`${C.SUPABASE_URL}/rest/v1/sources?select=*&order=added_at.asc`, { headers: { apikey: C.SUPABASE_ANON_KEY } });
+        const rows = await res.json();
+        if (!Array.isArray(rows)) throw new Error("sources table missing — run schema2-sources.sql");
+        el.classList.remove("state");
+        el.innerHTML = "";
+        for (const s of rows) {
+          const div = document.createElement("div");
+          div.className = "src-row";
+          div.innerHTML = `<span class="grow"><b>${s.name}</b> <a href="${s.url}" target="_blank" rel="noopener">↗</a></span>
+            <span class="pill">${s.strategy}</span>
+            <span class="pill" style="color:${s.enabled ? "var(--free)" : "#ff7a7a"}">${s.enabled ? "on" : "off"}</span>
+            <button class="mini">${s.enabled ? "disable" : "enable"}</button>`;
+          div.querySelector(".mini").onclick = async () => {
+            const out = await rpc("set_source_enabled", { secret: $("#fPass").value, p_id: s.id, p_enabled: !s.enabled });
+            if (out === "ok") loadSources(); else alert(typeof out === "string" ? out : "failed");
+          };
+          el.appendChild(div);
+        }
+      } catch (e) { el.textContent = e.message; }
+    }
+    loadSources();
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 // Claude reads date/time/price out of the text — in ONE batched call, and only
 // for events we haven't seen before, so the AI cost is near zero per run.
 import { fetchJson } from "../lib/fetchPage.js";
-import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate } from "../lib/util.js";
+import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
 import { knownEventUrls } from "../lib/db.js";
 
@@ -30,6 +30,7 @@ export async function scrape(source) {
     key: String(it.id),
     title: decodeEntities(it.title?.rendered || ""),
     text: stripHtml(it.content?.rendered || ""),
+    links: [...(it.content?.rendered || "").matchAll(/href="(https?:\/\/[^"]+)"/g)].map((m) => m[1]),
   }));
   const fields = await extractFieldsBatch(batch, todayISODate());
 
@@ -47,7 +48,8 @@ export async function scrape(source) {
       startsAt: israelISO(y, mo, d, hh, mm),
       priceText,
       isFree,
-      bookingUrl: it.link,
+      // prefer a ticketing-platform link, then Claude's pick of a registration link, then the event page
+      bookingUrl: findTicketLink(it.content?.rendered) || f.booking_url || it.link,
       eventUrl: it.link,
       imageUrl:
         it._embedded?.["wp:featuredmedia"]?.[0]?.source_url ||

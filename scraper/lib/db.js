@@ -40,6 +40,17 @@ export async function knownEventUrls(sourceId) {
   return new Map(rows.filter((r) => r.event_url).map((r) => [r.event_url, r.id]));
 }
 
+/** Enabled sources from the DB, or null if unavailable (caller falls back to the file list). */
+export async function getSources() {
+  if (!dbConfigured()) return null;
+  try {
+    const rows = await rest("sources?enabled=eq.true&select=*&order=added_at.asc");
+    return rows.length ? rows : null;
+  } catch {
+    return null; // table not created yet
+  }
+}
+
 export async function logRun(run) {
   if (!dbConfigured()) return;
   await rest("scrape_runs", {

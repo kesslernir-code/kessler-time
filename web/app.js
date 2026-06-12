@@ -12,6 +12,8 @@
       free: "חינם",
       today: "היום",
       tomorrow: "מחר",
+      weekend: "סופ״ש",
+      allDays: "כל הימים",
       empty: "אין אירועים שמתאימים לסינון",
       notConfigured: "האתר עוד לא מחובר למסד הנתונים.\n(צריך למלא את web/config.js)",
       error: "שגיאה בטעינת אירועים",
@@ -26,6 +28,8 @@
       free: "Free",
       today: "Today",
       tomorrow: "Tomorrow",
+      weekend: "Weekend",
+      allDays: "All days",
       empty: "No events match the filter",
       notConfigured: "Site is not connected to the database yet.\n(web/config.js needs to be filled in)",
       error: "Failed to load events",
@@ -50,6 +54,7 @@
   let activeSource = "all";
   let freeOnly = false;
   let query = "";
+  let dateFilter = "all"; // "all" | "today" | "tomorrow" | "weekend" | "YYYY-MM-DD"
 
   const SOURCES = {
     mazkeka: { he: "מזקקה", en: "Mazkeka" },
@@ -126,14 +131,36 @@
     return a;
   }
 
+  // Which day-keys does the current date filter allow? (null = all)
+  function allowedDays() {
+    const today = dayKey(new Date().toISOString());
+    const plus = (n) => dayKey(new Date(Date.now() + n * 864e5).toISOString());
+    if (dateFilter === "today") return [today];
+    if (dateFilter === "tomorrow") return [plus(1)];
+    if (dateFilter === "weekend") {
+      // upcoming Friday + Saturday (Israeli weekend)
+      const days = [];
+      for (let n = 0; n < 8 && days.length < 2; n++) {
+        const k = plus(n);
+        const wd = new Date(k + "T12:00:00+03:00").getUTCDay();
+        if (wd === 5 || wd === 6) days.push(k);
+      }
+      return days;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateFilter)) return [dateFilter];
+    return null;
+  }
+
   function render() {
     const list = $("#list");
     list.innerHTML = "";
     const q = query.trim().toLowerCase();
+    const days = allowedDays();
     const visible = events.filter(
       (e) =>
         (activeSource === "all" || e.source_id === activeSource) &&
         (!freeOnly || e.is_free) &&
+        (!days || days.includes(dayKey(e.starts_at))) &&
         (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q))
     );
     if (!visible.length) {
@@ -170,16 +197,40 @@
     }
   }
 
+  function renderDateChips() {
+    const wrap = $("#dateChips");
+    wrap.innerHTML = "";
+    const presets = [["all", "allDays"], ["today", "today"], ["tomorrow", "tomorrow"], ["weekend", "weekend"]];
+    for (const [val, label] of presets) {
+      const b = document.createElement("button");
+      b.className = "chip" + (dateFilter === val ? " on" : "");
+      b.textContent = t(label);
+      b.onclick = () => { dateFilter = val; renderDateChips(); render(); };
+      wrap.appendChild(b);
+    }
+    const picker = document.createElement("input");
+    picker.type = "date";
+    picker.className = "chip date-pick" + (/^\d{4}/.test(dateFilter) ? " on" : "");
+    picker.min = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+    if (/^\d{4}/.test(dateFilter)) picker.value = dateFilter;
+    picker.onchange = () => {
+      dateFilter = picker.value || "all";
+      renderDateChips(); render();
+    };
+    wrap.appendChild(picker);
+  }
+
   // ---- wire up --------------------------------------------------------
   $("#langToggle").onclick = () => {
     lang = lang === "he" ? "en" : "he";
     localStorage.setItem("kt-lang", lang);
-    applyLang(); renderChips(); render();
+    applyLang(); renderChips(); renderDateChips(); render();
   };
   $("#freeOnly").onchange = (e) => { freeOnly = e.target.checked; render(); };
   $("#search").oninput = (e) => { query = e.target.value; render(); };
 
   applyLang();
   renderChips();
+  renderDateChips();
   load();
 })();

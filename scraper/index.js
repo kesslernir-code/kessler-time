@@ -1,9 +1,9 @@
 // Orchestrator: run every source through its strategy, normalize, upsert, log.
 // Usage: node scraper/index.js [--dry-run] [--source=<id>]
 import { mkdirSync, writeFileSync } from "node:fs";
-import { sources } from "./sources.js";
+import { sources as fileSources } from "./sources.js";
 import { shortHash, jerusalemOffset } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun } from "./lib/db.js";
+import { dbConfigured, upsertEvents, logRun, getSources } from "./lib/db.js";
 import * as wpEventsApi from "./strategies/wpEventsApi.js";
 import * as radicalCalendar from "./strategies/radicalCalendar.js";
 import * as wpApiAi from "./strategies/wpApiAi.js";
@@ -51,6 +51,12 @@ function normalize(raw, source) {
 }
 
 if (DRY) console.error(dbConfigured() ? "-- DRY RUN --" : "-- DRY RUN (no SUPABASE_URL configured) --");
+
+// Source list lives in the DB (editable from admin.html); sources.js is the fallback/seed.
+const dbSources = await getSources();
+const sources = dbSources ?? fileSources;
+console.error(`sources: ${sources.map((s) => s.id).join(", ")} (${dbSources ? "from db" : "from file"})`);
+
 let failures = 0;
 
 for (const source of sources) {

@@ -37,13 +37,18 @@ function parseJsonArray(text) {
  */
 export async function extractFieldsBatch(items, todayISO) {
   const list = items
-    .map((it) => `### key: ${it.key}\nTITLE: ${it.title}\nTEXT:\n${it.text.slice(0, 900)}`)
+    .map(
+      (it) =>
+        `### key: ${it.key}\nTITLE: ${it.title}\n` +
+        (it.links?.length ? `LINKS: ${it.links.slice(0, 5).join(" , ")}\n` : "") +
+        `TEXT:\n${it.text.slice(0, 900)}`
+    )
     .join("\n\n");
   const prompt = `Today is ${todayISO} (Israel). Below are event announcements, mostly in Hebrew, scraped from venue websites.
 For EACH item, find the event's actual date and start time from the text. Hebrew date formats like "19.6", "יום שישי 13.6", "שבת 14/6", times like "19:30 דלתות" (doors) or "20:00 התחלה" (start) are common — prefer the start time over doors time. If a year is missing, choose the year that makes the date today or in the future. Also extract price if mentioned (e.g. "35 ש״ח", "₪50", "כניסה חופשית" = free).
 
 Return ONLY a JSON array, one object per item:
-[{"key": "...", "date": "YYYY-MM-DD" or null if no real date in the text, "time": "HH:MM" or null, "end_time": "HH:MM" or null, "price_text": "..." or null, "is_free": true/false/null}]
+[{"key": "...", "date": "YYYY-MM-DD" or null if no real date in the text, "time": "HH:MM" or null, "end_time": "HH:MM" or null, "price_text": "..." or null, "is_free": true/false/null, "booking_url": one of the item's LINKS only if its clear purpose is buying tickets or registering for THIS event (never articles, reviews, press, social media or general info pages — when unsure use null)}]
 
 ${list}`;
   const out = parseJsonArray(await ask(prompt));

@@ -72,5 +72,13 @@ export function reconcilePrice(priceText, isFreeHint) {
   return { priceText: text || null, isFree };
 }
 
+/** First link to a known ticketing platform inside raw HTML, or null. */
+export function findTicketLink(html = "") {
+  const m = html.match(
+    /href=["'](https?:\/\/[^"']*(?:eventer\.co\.il|eventbrite\.|tickchak\.co\.il|tic\.li|tixwise\.co\.il|smarticket\.co\.il|go-out\.co|did\.li|tickets\.|cardcom\.solutions|lu\.ma|tickel\.co)[^"']*)["']/i
+  );
+  return m ? m[1].replace(/&amp;/g, "&") : null;
+}
+
 export const todayISODate = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date()); // YYYY-MM-DD
