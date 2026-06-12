@@ -4,13 +4,24 @@
 //   <div class="ue_p_title">TITLE</div>
 //   <div class="uc_post_meta_date"><span>שישי | 12.06 | 10:00</span></div>
 //   <span class="price_normal">₪35</span> / "חינם לחברי רדיקל"
-import { fetchText } from "../lib/fetchPage.js";
-import { decodeEntities, inferYear, israelISO, reconcilePrice } from "../lib/util.js";
+import { fetchText, fetchJson } from "../lib/fetchPage.js";
+import { decodeEntities, inferYear, israelISO, reconcilePrice, stripHtml } from "../lib/util.js";
 
 export const name = "radical-calendar";
 
+/** slug -> short description, from the WP API's ready-made excerpts. */
+async function excerptsBySlug() {
+  try {
+    const items = await fetchJson("https://radical.org.il/wp-json/wp/v2/events?per_page=100&orderby=date&order=desc");
+    return new Map(items.map((it) => [it.slug, stripHtml(it.excerpt?.rendered || "").slice(0, 400)]));
+  } catch {
+    return new Map(); // descriptions are nice-to-have; never fail the scrape over them
+  }
+}
+
 export async function scrape(source) {
   const html = await fetchText(source.url);
+  const excerpts = await excerptsBySlug();
   const cards = html.split(/class="uc_post_grid_style_one_item/).slice(1);
   const events = [];
 
@@ -35,10 +46,11 @@ export async function scrape(source) {
       undefined
     );
 
+    const slug = link.replace(/\/$/, "").split("/").pop();
     events.push({
-      occurrenceKey: link.replace(/\/$/, "").split("/").pop(),
+      occurrenceKey: slug,
       title: decodeEntities(title).trim(),
-      description: null,
+      description: excerpts.get(slug) || null,
       startsAt: israelISO(year, mo, dd, hh, mm),
       priceText,
       isFree,

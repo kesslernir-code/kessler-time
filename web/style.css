@@ -88,6 +88,10 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
   overflow: hidden; min-height: 2.6em;
 }
 .meta { color: var(--muted); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; }
+.desc {
+  margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 .meta .venue { color: var(--accent-2); }
 .price { margin-top: auto; font-size: 14px; color: var(--text); }
 .price.free { color: var(--free); font-weight: 600; }

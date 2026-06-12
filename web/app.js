@@ -55,6 +55,12 @@
   let freeOnly = false;
   let query = "";
   let dateFilter = "all"; // "all" | "today" | "tomorrow" | "weekend" | "YYYY-MM-DD"
+  let activeCity = "all";
+
+  // Venue sites often block hotlinked images (and serve huge files); the wsrv.nl
+  // proxy fetches them neutrally and resizes — one fix for every problematic site.
+  const proxyImg = (url) =>
+    `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=640&h=640&fit=cover&output=webp&q=78`;
 
   // Source labels load from the DB so sites added via admin.html get a chip
   // automatically. A bilingual name like "Radical רדיקל" is split per language.
@@ -94,6 +100,7 @@
       const res = await fetch(url, { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) throw new Error(res.status);
       events = await res.json();
+      renderCityChips();
       render();
     } catch (e) {
       $("#stateMsg").textContent = `${t("error")} (${e.message})`;
@@ -128,7 +135,7 @@
     a.target = "_blank";
     a.rel = "noopener";
     const img = e.image_url
-      ? `<img loading="lazy" src="${e.image_url}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(e.title)}33>${(e.title || "?")[0]}</div>'">`
+      ? `<img loading="lazy" src="${proxyImg(e.image_url)}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(e.title)}33>${(e.title || "?")[0]}</div>'">`
       : `<div class="ph" style="background:${hue(e.title)}33">${(e.title || "?")[0]}</div>`;
     const freeBadge = e.is_free ? `<span class="badge free">${t("free")}</span>` : "";
     const price = e.is_free
@@ -142,9 +149,13 @@
       <div class="body">
         <h3></h3>
         <div class="meta"><span class="venue">${src}</span>${e.city ? `<span>${e.city}</span>` : ""}</div>
+        <p class="desc"></p>
         ${price}
       </div>`;
     a.querySelector("h3").textContent = e.title;
+    const desc = a.querySelector(".desc");
+    if (e.description) desc.textContent = e.description;
+    else desc.remove();
     return a;
   }
 
@@ -176,6 +187,7 @@
     const visible = events.filter(
       (e) =>
         (activeSource === "all" || e.source_id === activeSource) &&
+        (activeCity === "all" || e.city === activeCity) &&
         (!freeOnly || e.is_free) &&
         (!days || days.includes(dayKey(e.starts_at))) &&
         (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q))
@@ -214,6 +226,22 @@
     }
   }
 
+  // City names are always English (project convention); chips appear only when
+  // events span more than one city.
+  function renderCityChips() {
+    const wrap = $("#cityChips");
+    wrap.innerHTML = "";
+    const cities = [...new Set(events.map((e) => e.city).filter(Boolean))].sort();
+    if (cities.length < 2) return;
+    for (const c of ["all", ...cities]) {
+      const b = document.createElement("button");
+      b.className = "chip" + (activeCity === c ? " on" : "");
+      b.textContent = c === "all" ? t("all") : c;
+      b.onclick = () => { activeCity = c; renderCityChips(); render(); };
+      wrap.appendChild(b);
+    }
+  }
+
   function renderDateChips() {
     const wrap = $("#dateChips");
     wrap.innerHTML = "";
@@ -241,7 +269,7 @@
   $("#langToggle").onclick = () => {
     lang = lang === "he" ? "en" : "he";
     localStorage.setItem("kt-lang", lang);
-    applyLang(); renderChips(); renderDateChips(); render();
+    applyLang(); renderChips(); renderCityChips(); renderDateChips(); render();
   };
   $("#freeOnly").onchange = (e) => { freeOnly = e.target.checked; render(); };
   $("#search").oninput = (e) => { query = e.target.value; render(); };

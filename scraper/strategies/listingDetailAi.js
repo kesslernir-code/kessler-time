@@ -78,10 +78,13 @@ export async function scrape(source, log = console.error) {
     const [y, mo, day] = date.split("-").map(Number);
     const [hh, mm] = (f.time || "20:00").split(":").map(Number);
     const { priceText, isFree } = reconcilePrice(f.price_text, f.is_free);
+    // The longest paragraph of a detail page is almost always the event description
+    const description =
+      d.text.split("\n").reduce((a, b) => (b.trim().length > a.length ? b.trim() : a), "").slice(0, 400) || null;
     events.push({
       occurrenceKey: d.url + "_" + date,
       title: d.title,
-      description: null,
+      description: description && description.length > 60 ? description : null,
       startsAt: israelISO(y, mo, day, hh, mm),
       priceText,
       isFree,
