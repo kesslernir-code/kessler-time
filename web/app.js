@@ -82,7 +82,7 @@
     .then((m) => {
       if (!m.count) return;
       const day = Math.floor(Date.now() / 864e5);
-      $("#heroImg").src = "pics/" + m.files[day % m.count];
+      $("#heroImg").src = "pics/" + m.files[day % m.count] + (m.v ? "?v=" + m.v : "");
     })
     .catch(() => {});
 

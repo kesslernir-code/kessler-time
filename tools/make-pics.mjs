@@ -28,5 +28,5 @@ for (const [i, name] of photos.entries()) {
   }
 }
 
-writeFileSync(`${OUT}/manifest.json`, JSON.stringify({ count: files.length, files }, null, 2));
+writeFileSync(`${OUT}/manifest.json`, JSON.stringify({ count: files.length, v: Date.now(), files }, null, 2));
 console.log(`manifest.json: ${files.length} pictures`);
