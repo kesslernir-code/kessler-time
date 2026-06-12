@@ -8,12 +8,14 @@ import * as wpEventsApi from "./strategies/wpEventsApi.js";
 import * as radicalCalendar from "./strategies/radicalCalendar.js";
 import * as wpApiAi from "./strategies/wpApiAi.js";
 import * as autoLadder from "./strategies/autoLadder.js";
+import * as listingDetailAi from "./strategies/listingDetailAi.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
   [radicalCalendar.name]: radicalCalendar,
   [wpApiAi.name]: wpApiAi,
   [autoLadder.name]: autoLadder,
+  [listingDetailAi.name]: listingDetailAi,
 };
 
 const args = process.argv.slice(2);

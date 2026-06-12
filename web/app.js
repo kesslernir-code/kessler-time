@@ -56,11 +56,28 @@
   let query = "";
   let dateFilter = "all"; // "all" | "today" | "tomorrow" | "weekend" | "YYYY-MM-DD"
 
-  const SOURCES = {
-    mazkeka: { he: "מזקקה", en: "Mazkeka" },
-    radical: { he: "רדיקל", en: "Radical" },
-    matmon: { he: "מטמון", en: "Matmon" },
-  };
+  // Source labels load from the DB so sites added via admin.html get a chip
+  // automatically. A bilingual name like "Radical רדיקל" is split per language.
+  let SOURCES = {};
+  function splitName(name) {
+    const he = (name.match(/[֐-׿][֐-׿\s'״׳0-9]*/g) || []).join(" ").trim();
+    const en = (name.match(/[A-Za-z][A-Za-z\s0-9&'.-]*/g) || []).join(" ").trim();
+    return { he: he || name, en: en || name };
+  }
+  async function loadSources() {
+    if (!configured) return;
+    try {
+      const res = await fetch(
+        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name&order=added_at.asc`,
+        { headers: { apikey: CFG.SUPABASE_ANON_KEY } }
+      );
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length) {
+        SOURCES = Object.fromEntries(rows.map((r) => [r.id, splitName(r.name)]));
+        renderChips();
+      }
+    } catch {} // chips just stay minimal if the sources table is unreachable
+  }
 
   // ---- data -----------------------------------------------------------
   async function load() {
@@ -232,5 +249,6 @@
   applyLang();
   renderChips();
   renderDateChips();
+  loadSources();
   load();
 })();

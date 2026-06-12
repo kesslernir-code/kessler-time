@@ -59,7 +59,7 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
 }
 .day-head .rel { color: var(--accent); margin-inline-start: 8px; font-size: 14px; font-weight: 600; }
 
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
 
 .card {
   background: var(--panel); border-radius: var(--radius); overflow: hidden;
@@ -67,10 +67,12 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
   text-decoration: none; color: inherit; transition: transform .15s, border-color .15s;
 }
 .card:hover { transform: translateY(-3px); border-color: var(--accent-2); }
-.card .img { aspect-ratio: 16/10; background: var(--panel-2); position: relative; }
-.card .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.card .img .ph { /* fallback when no image: deterministic gradient + initial */
-  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+/* Fixed square media box: absolute-positioned content can't stretch it, so
+   every card is identical regardless of the poster's native proportions. */
+.card .img { aspect-ratio: 1/1; background: var(--panel-2); position: relative; overflow: hidden; }
+.card .img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.card .img .ph { /* fallback when no image: deterministic tint + initial */
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 52px; font-weight: 800; color: rgba(255,255,255,.85);
 }
 .badge {
@@ -80,7 +82,11 @@ input.date-pick.on { background: var(--accent-2); color: #0e0f13; border-color: 
 }
 .badge.free { color: var(--free); inset-inline-start: auto; inset-inline-end: 10px; }
 .card .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.card h3 { margin: 0; font-size: 17px; line-height: 1.3; }
+.card h3 {
+  margin: 0; font-size: 16px; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; min-height: 2.6em;
+}
 .meta { color: var(--muted); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; }
 .meta .venue { color: var(--accent-2); }
 .price { margin-top: auto; font-size: 14px; color: var(--text); }

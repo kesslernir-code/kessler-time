@@ -51,7 +51,7 @@ Return ONLY a JSON array, one object per item:
 [{"key": "...", "date": "YYYY-MM-DD" or null if no real date in the text, "time": "HH:MM" or null, "end_time": "HH:MM" or null, "price_text": "..." or null, "is_free": true/false/null, "booking_url": one of the item's LINKS only if its clear purpose is buying tickets or registering for THIS event (never articles, reviews, press, social media or general info pages — when unsure use null)}]
 
 ${list}`;
-  const out = parseJsonArray(await ask(prompt));
+  const out = parseJsonArray(await ask(prompt, 8000));
   return new Map(out.map((o) => [o.key, o]));
 }
 
