@@ -46,6 +46,7 @@
 
   // ---- state ----------------------------------------------------------
   let events = [];
+  const configured = Boolean(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
   let activeSource = "all";
   let freeOnly = false;
   let query = "";
@@ -58,7 +59,7 @@
 
   // ---- data -----------------------------------------------------------
   async function load() {
-    if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
+    if (!configured) {
       $("#stateMsg").textContent = t("notConfigured");
       return;
     }
@@ -136,7 +137,7 @@
         (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q))
     );
     if (!visible.length) {
-      list.innerHTML = `<div class="state">${t("empty")}</div>`;
+      list.innerHTML = `<div class="state">${t(configured ? "empty" : "notConfigured")}</div>`;
       return;
     }
     let currentDay = null, grid = null;
