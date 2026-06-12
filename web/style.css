@@ -22,6 +22,13 @@ body {
 }
 
 .top { display: flex; align-items: center; justify-content: space-between; }
+.top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.top-link {
+  color: var(--muted); text-decoration: none; font-size: 14px;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid #2c3040; background: var(--panel);
+}
+.top-link:hover { color: var(--text); border-color: var(--accent-2); }
+.add-link { color: var(--accent); }
 .logo { font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
 .logo span { color: var(--accent); }
 .lang-btn {

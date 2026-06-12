@@ -19,6 +19,8 @@
       error: "שגיאה בטעינת אירועים",
       status: "סטטוס סריקה",
       tickets: "כרטיסים",
+      recs: "המלצות",
+      addPlace: "+ הוספת מקום",
     },
     en: {
       tagline: "Upcoming events from the places we love",
@@ -35,6 +37,8 @@
       error: "Failed to load events",
       status: "Scrape status",
       tickets: "Tickets",
+      recs: "Recommendations",
+      addPlace: "+ Add place",
     },
   };
   let lang = localStorage.getItem("kt-lang") || "he";
