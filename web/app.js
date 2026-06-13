@@ -65,13 +65,22 @@
   // ---- state ----------------------------------------------------------
   let events = [];
   const configured = Boolean(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
-  let activeSource = "all";
+  // Each filter is a Set — empty Set means "all". Several chips can be active at once.
+  const srcSel = new Set();
+  const citySel = new Set();
+  const catSel = new Set();
+  const daySel = new Set(); // any of: today / tomorrow / weekend
+  let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
-  let dateFilter = "all"; // "all" | "today" | "tomorrow" | "weekend" | "YYYY-MM-DD"
-  let activeCity = "all";
-  let activeCat = "all";
   const CATEGORIES = ["fringe", "club", "mainstream", "festival"];
+
+  // Toggle val in a set; passing null clears the set ("all" chip).
+  const toggle = (set, val) => {
+    if (val === null) set.clear();
+    else if (set.has(val)) set.delete(val);
+    else set.add(val);
+  };
 
   // Venue sites often block hotlinked images (and serve huge files); the wsrv.nl
   // proxy fetches them neutrally and resizes — one fix for every problematic site.
@@ -84,7 +93,9 @@
     .then((m) => {
       if (!m.count) return;
       const day = Math.floor(Date.now() / 864e5);
-      $("#heroImg").src = "pics/" + m.files[day % m.count] + (m.v ? "?v=" + m.v : "");
+      const src = "pics/" + m.files[day % m.count] + (m.v ? "?v=" + m.v : "");
+      $("#heroImg").src = src;
+      $("#heroBg").src = src;
     })
     .catch(() => {});
 
@@ -198,22 +209,22 @@
 
   // Which day-keys does the current date filter allow? (null = all)
   function allowedDays() {
-    const today = dayKey(new Date().toISOString());
+    if (specificDate) return [specificDate];
+    if (!daySel.size) return null;
     const plus = (n) => dayKey(new Date(Date.now() + n * 864e5).toISOString());
-    if (dateFilter === "today") return [today];
-    if (dateFilter === "tomorrow") return [plus(1)];
-    if (dateFilter === "weekend") {
+    const days = new Set();
+    if (daySel.has("today")) days.add(plus(0));
+    if (daySel.has("tomorrow")) days.add(plus(1));
+    if (daySel.has("weekend")) {
       // upcoming Friday + Saturday (Israeli weekend)
-      const days = [];
-      for (let n = 0; n < 8 && days.length < 2; n++) {
+      let added = 0;
+      for (let n = 0; n < 8 && added < 2; n++) {
         const k = plus(n);
         const wd = new Date(k + "T12:00:00+03:00").getUTCDay();
-        if (wd === 5 || wd === 6) days.push(k);
+        if (wd === 5 || wd === 6) { days.add(k); added++; }
       }
-      return days;
     }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateFilter)) return [dateFilter];
-    return null;
+    return [...days];
   }
 
   function render() {
@@ -223,9 +234,9 @@
     const days = allowedDays();
     const visible = events.filter(
       (e) =>
-        (activeSource === "all" || e.source_id === activeSource) &&
-        (activeCity === "all" || e.city === activeCity) &&
-        (activeCat === "all" || (e.category || "fringe") === activeCat) &&
+        (!srcSel.size || srcSel.has(e.source_id)) &&
+        (!citySel.size || citySel.has(e.city)) &&
+        (!catSel.size || catSel.has(e.category || "fringe")) &&
         (!freeOnly || e.is_free) &&
         (!days || days.includes(dayKey(e.starts_at))) &&
         (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q))
@@ -252,20 +263,27 @@
     }
   }
 
-  // Place chips cascade from the category filter: hidden on "all" (too many
-  // places to list), shown per chosen category with only its places.
+  // Small helper: a chip whose "on" state reflects set membership (or "all"
+  // highlighted when the set is empty). Multi-select — clicking toggles.
+  function addChip(wrap, label, on, onClick) {
+    const b = document.createElement("button");
+    b.className = "chip" + (on ? " on" : "");
+    b.textContent = label;
+    b.onclick = onClick;
+    wrap.appendChild(b);
+  }
+
+  // Place chips cascade from the category filter: hidden when no category is
+  // chosen (too many places to list), shown for the chosen categories only.
   function renderChips() {
     const wrap = $("#sourceChips");
     wrap.innerHTML = "";
-    if (activeCat === "all") return;
-    const ids = Object.keys(SOURCES).filter((id) => SOURCES[id].category === activeCat);
+    if (!catSel.size) return;
+    const ids = Object.keys(SOURCES).filter((id) => catSel.has(SOURCES[id].category));
     if (!ids.length) return;
-    for (const id of ["all", ...ids]) {
-      const b = document.createElement("button");
-      b.className = "chip" + (activeSource === id ? " on" : "");
-      b.textContent = id === "all" ? t("all") : SOURCES[id][lang];
-      b.onclick = () => { activeSource = id; renderChips(); render(); };
-      wrap.appendChild(b);
+    addChip(wrap, t("all"), !srcSel.size, () => { srcSel.clear(); renderChips(); render(); });
+    for (const id of ids) {
+      addChip(wrap, SOURCES[id][lang], srcSel.has(id), () => { toggle(srcSel, id); renderChips(); render(); });
     }
   }
 
@@ -275,12 +293,16 @@
     const wrap = $("#catChips");
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
-    for (const c of ["all", ...CATEGORIES]) {
-      const b = document.createElement("button");
-      b.className = "chip" + (activeCat === c ? " on" : "");
-      b.textContent = c === "all" ? t("all") : t("cat_" + c);
-      b.onclick = () => { activeCat = c; activeSource = "all"; renderCatChips(); renderChips(); render(); };
-      wrap.appendChild(b);
+    addChip(wrap, t("all"), !catSel.size, () => {
+      catSel.clear(); srcSel.clear(); renderCatChips(); renderChips(); render();
+    });
+    for (const c of CATEGORIES) {
+      addChip(wrap, t("cat_" + c), catSel.has(c), () => {
+        toggle(catSel, c);
+        // drop any selected places no longer in the chosen categories
+        for (const id of [...srcSel]) if (!catSel.has(SOURCES[id]?.category)) srcSel.delete(id);
+        renderCatChips(); renderChips(); render();
+      });
     }
   }
 
@@ -291,44 +313,44 @@
     wrap.innerHTML = "";
     const cities = [...new Set(events.map((e) => e.city).filter(Boolean))].sort();
     if (cities.length < 2) return;
-    for (const c of ["all", ...cities]) {
-      const b = document.createElement("button");
-      b.className = "chip" + (activeCity === c ? " on" : "");
-      b.textContent = c === "all" ? t("all") : c;
-      b.onclick = () => { activeCity = c; renderCityChips(); render(); };
-      wrap.appendChild(b);
+    addChip(wrap, t("all"), !citySel.size, () => { citySel.clear(); renderCityChips(); render(); });
+    for (const c of cities) {
+      addChip(wrap, c, citySel.has(c), () => { toggle(citySel, c); renderCityChips(); render(); });
     }
   }
 
   function renderDateChips() {
     const wrap = $("#dateChips");
     wrap.innerHTML = "";
-    const presets = [["all", "allDays"], ["today", "today"], ["tomorrow", "tomorrow"], ["weekend", "weekend"]];
-    for (const [val, label] of presets) {
-      const b = document.createElement("button");
-      b.className = "chip" + (dateFilter === val ? " on" : "");
-      b.textContent = t(label);
-      b.onclick = () => { dateFilter = val; renderDateChips(); render(); };
-      wrap.appendChild(b);
+    // "all days" is active when nothing is chosen
+    addChip(wrap, t("allDays"), !daySel.size && !specificDate, () => {
+      daySel.clear(); specificDate = null; renderDateChips(); render();
+    });
+    // today / tomorrow / weekend — combinable
+    for (const val of ["today", "tomorrow", "weekend"]) {
+      addChip(wrap, t(val), daySel.has(val), () => {
+        specificDate = null; toggle(daySel, val); renderDateChips(); render();
+      });
     }
     // A clean 📅 chip that opens the native calendar — the bare <input type=date>
-    // renders badly on phones. The actual input stays hidden.
-    const isDate = /^\d{4}/.test(dateFilter);
+    // renders badly on phones. The actual input stays hidden. A specific date is
+    // exclusive of the presets.
     const picker = document.createElement("input");
     picker.type = "date";
     picker.className = "date-hidden";
     picker.min = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
-    if (isDate) picker.value = dateFilter;
+    if (specificDate) picker.value = specificDate;
     picker.onchange = () => {
-      dateFilter = picker.value || "all";
+      specificDate = picker.value || null;
+      if (specificDate) daySel.clear();
       renderDateChips(); render();
     };
     const btn = document.createElement("button");
-    btn.className = "chip" + (isDate ? " on" : "");
+    btn.className = "chip" + (specificDate ? " on" : "");
     btn.textContent =
       "📅 " +
-      (isDate
-        ? new Date(dateFilter + "T12:00:00").toLocaleDateString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" })
+      (specificDate
+        ? new Date(specificDate + "T12:00:00").toLocaleDateString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" })
         : t("pickDate"));
     btn.onclick = () => {
       try { picker.showPicker(); } catch { picker.focus(); picker.click(); }

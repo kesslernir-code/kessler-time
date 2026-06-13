@@ -40,9 +40,11 @@ body {
 .logo { font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
 .logo span { color: var(--accent); }
 
-.hero { border-radius: var(--radius); overflow: hidden; margin: 14px 0 4px; border: 1px solid #242837; }
-.hero img { width: 100%; height: 200px; object-fit: cover; object-position: 50% 18%; display: block; }
-@media (min-width: 700px) { .hero img { height: 300px; } }
+/* Whole photo shown over a blurred fill of itself — never crops faces, any aspect ratio works */
+.hero { position: relative; border-radius: var(--radius); overflow: hidden; margin: 14px 0 4px; border: 1px solid #242837; height: 230px; background: #000; }
+@media (min-width: 700px) { .hero { height: 320px; } }
+.hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.15); filter: blur(22px) brightness(.55); }
+.hero-fg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .lang-btn {
   background: var(--panel); color: var(--text); border: 1px solid #2c3040;
   border-radius: 999px; padding: 6px 14px; font: inherit; cursor: pointer;

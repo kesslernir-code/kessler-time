@@ -18,8 +18,10 @@ for (const [i, name] of photos.entries()) {
   try {
     await sharp(`${SRC}/${name}`)
       .rotate() // honor EXIF orientation
-      .resize(1600, 600, { fit: "cover", position: "top" }) // faces live in the top part of selfies
-      .webp({ quality: 78 })
+      // keep the WHOLE photo (no face-cutting crop); the page shows it complete
+      // over a blurred fill, so any aspect ratio looks good and nothing is cut
+      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
       .toFile(`${OUT}/${out}`);
     files.push(out);
     console.log(`${out}  <-  ${name}`);
