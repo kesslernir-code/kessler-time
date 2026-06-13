@@ -1,0 +1,22 @@
+name: Deploy site to Netlify
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g netlify-cli@26
+      - name: Deploy web/ to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: netlify deploy --dir=web --prod --message "deploy ${{ github.sha }}"
