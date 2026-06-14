@@ -30,6 +30,10 @@ const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run") || !dbConfigured();
 const only = args.find((a) => a.startsWith("--source="))?.split("=")[1];
 
+// Title-case English city names so "tel aviv" / "Tel aviv" → "Tel Aviv" (Hebrew untouched)
+const normCity = (c) =>
+  c == null ? null : String(c).replace(/[A-Za-z]+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+
 const ilDay = (iso) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(iso));
 
@@ -62,7 +66,7 @@ function normalize(raw, source) {
       starts_at: startsAt,
       ends_at: e.endsAt || null,
       venue: source.venue,
-      city: source.city,
+      city: normCity(source.city),
       // present only once the DB has the category column (sources row carries it)
       category: source.category || undefined,
       price_text: e.priceText || null,
