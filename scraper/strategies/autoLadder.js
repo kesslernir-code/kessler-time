@@ -41,14 +41,6 @@ function jsonLdEvents(html, source) {
   return out;
 }
 
-function looksLikeJsShell(html) {
-  const text = stripHtml(html);
-  // very little visible text relative to a real page, OR a known "please wait /
-  // verifying" bot-challenge interstitial — either way, try rendering
-  if (text.length < 400) return true;
-  return /רק רגע|נא להמתין|מאמתים את הבקשה|just a moment|checking your browser|enable javascript/i.test(text);
-}
-
 async function renderWithPuppeteer(url) {
   try {
     const { renderPage } = await import("../lib/render.js");
@@ -69,49 +61,51 @@ export async function scrape(source, log = console.error) {
     log(`  [${source.id}] wp-auto n/a: ${e.message}`);
   }
 
+  async function aiExtract(html) {
+    if (!aiConfigured()) throw new Error("no structured data found and ANTHROPIC_API_KEY missing");
+    const raw = await extractEventsFromPage(
+      { sourceName: source.name, url: source.url, text: stripHtml(html) },
+      todayISODate()
+    );
+    return raw
+      .filter((e) => e.title && e.date)
+      .map((e) => {
+        const [y, mo, d] = e.date.split("-").map(Number);
+        const [hh, mm] = (e.time || "20:00").split(":").map(Number);
+        const { priceText, isFree } = reconcilePrice(e.price_text, e.is_free);
+        return {
+          occurrenceKey: shortHash(e.title + e.date),
+          title: e.title,
+          description: e.description || null,
+          startsAt: israelISO(y, mo, d, hh, mm),
+          priceText, isFree,
+          bookingUrl: e.event_url || source.url,
+          eventUrl: e.event_url || source.url,
+          imageUrl: e.image_url || null,
+          lang: "he",
+          confidence: Math.min(e.confidence ?? 0.7, 0.85),
+        };
+      });
+  }
+
   let html = await fetchText(source.url);
 
-  // Rung 1: JSON-LD
+  // Rung 1: JSON-LD on the static HTML
   let events = jsonLdEvents(html, source);
   if (events.length) { log(`  [${source.id}] ladder rung: json-ld (${events.length})`); return events; }
 
-  // Rung 2.5: JS shell? render first
-  if (looksLikeJsShell(html)) {
-    const rendered = await renderWithPuppeteer(source.url);
-    if (rendered) {
-      html = rendered;
-      events = jsonLdEvents(html, source);
-      if (events.length) { log(`  [${source.id}] ladder rung: puppeteer+json-ld (${events.length})`); return events; }
-    } else {
-      log(`  [${source.id}] page looks like a JS shell and puppeteer is not installed (npm i puppeteer)`);
-    }
-  }
+  // Rung 2: AI over the static text
+  events = await aiExtract(html);
+  if (events.length) { log(`  [${source.id}] ladder rung: ai-extraction (${events.length})`); return events; }
 
-  // Rung 3: AI over the page text
-  if (!aiConfigured()) throw new Error("no structured data found and ANTHROPIC_API_KEY missing");
-  const raw = await extractEventsFromPage(
-    { sourceName: source.name, url: source.url, text: stripHtml(html) },
-    todayISODate()
-  );
-  log(`  [${source.id}] ladder rung: ai-extraction (${raw.length})`);
-  return raw
-    .filter((e) => e.title && e.date)
-    .map((e) => {
-      const [y, mo, d] = e.date.split("-").map(Number);
-      const [hh, mm] = (e.time || "20:00").split(":").map(Number);
-      const { priceText, isFree } = reconcilePrice(e.price_text, e.is_free);
-      return {
-        occurrenceKey: shortHash(e.title + e.date),
-        title: e.title,
-        description: e.description || null,
-        startsAt: israelISO(y, mo, d, hh, mm),
-        priceText,
-        isFree,
-        bookingUrl: e.event_url || source.url,
-        eventUrl: e.event_url || source.url,
-        imageUrl: e.image_url || null,
-        lang: "he",
-        confidence: Math.min(e.confidence ?? 0.7, 0.85),
-      };
-    });
+  // Rung 3: nothing from static HTML — the site likely renders events with
+  // JavaScript (Wix, SPAs). Render in a real browser and try JSON-LD + AI again.
+  log(`  [${source.id}] static empty — rendering with browser…`);
+  const rendered = await renderWithPuppeteer(source.url);
+  if (!rendered) { log(`  [${source.id}] render unavailable`); return []; }
+  events = jsonLdEvents(rendered, source);
+  if (events.length) { log(`  [${source.id}] ladder rung: render+json-ld (${events.length})`); return events; }
+  events = await aiExtract(rendered);
+  log(`  [${source.id}] ladder rung: render+ai (${events.length})`);
+  return events;
 }
