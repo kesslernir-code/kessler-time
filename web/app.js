@@ -26,6 +26,7 @@
       cat_club: "מועדונים",
       cat_mainstream: "מיינסטרים",
       cat_festival: "פסטיבלים",
+      cat_cinema: "קולנוע",
     },
     en: {
       tagline: "Upcoming events from the places we love",
@@ -49,6 +50,7 @@
       cat_club: "Clubs",
       cat_mainstream: "Mainstream",
       cat_festival: "Festivals",
+      cat_cinema: "Cinema",
     },
   };
   let lang = localStorage.getItem("kt-lang") || "he";
@@ -73,7 +75,7 @@
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
-  const CATEGORIES = ["fringe", "club", "mainstream", "festival"];
+  const CATEGORIES = ["fringe", "club", "mainstream", "festival", "cinema"];
 
   // Toggle val in a set; passing null clears the set ("all" chip).
   const toggle = (set, val) => {

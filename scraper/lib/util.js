@@ -81,6 +81,21 @@ export function canonTitle(s = "") {
     .trim();
 }
 
+/** Scan free text for a price: returns "₪50" / "₪50–70" / "חינם" / null. Generic, no per-site rules. */
+export function scanPrice(text = "") {
+  const nums = [
+    ...text.matchAll(/(?:₪|ש"ח|ש״ח|שח|NIS|ILS)\s*(\d{1,4})|(\d{1,4})\s*(?:₪|ש"ח|ש״ח|שח|NIS|ILS)/gi),
+  ]
+    .map((m) => Number(m[1] || m[2]))
+    .filter((n) => n >= 10 && n <= 2000);
+  if (nums.length) {
+    const lo = Math.min(...nums), hi = Math.max(...nums);
+    return lo === hi ? `₪${lo}` : `₪${lo}–${hi}`;
+  }
+  if (/כניסה חופשית|כניסה חינם|הכניסה חופשית|free entrance|free entry|admission free/i.test(text)) return "חינם";
+  return null;
+}
+
 /** First link to a known ticketing platform inside raw HTML, or null. */
 export function findTicketLink(html = "") {
   const m = html.match(

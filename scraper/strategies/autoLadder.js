@@ -59,6 +59,16 @@ async function renderWithPuppeteer(url) {
 }
 
 export async function scrape(source, log = console.error) {
+  // Rung 0: generic WordPress extractor (most venues are WP) — gets image, date,
+  // price, ticket link structurally. Falls through if the site isn't WP.
+  try {
+    const wp = await import("./wpAuto.js");
+    const events = await wp.scrape(source, log);
+    if (events.length) { log(`  [${source.id}] ladder rung: wp-auto (${events.length})`); return events; }
+  } catch (e) {
+    log(`  [${source.id}] wp-auto n/a: ${e.message}`);
+  }
+
   let html = await fetchText(source.url);
 
   // Rung 1: JSON-LD

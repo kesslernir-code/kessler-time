@@ -13,6 +13,7 @@ import * as autoLadder from "./strategies/autoLadder.js";
 import * as listingDetailAi from "./strategies/listingDetailAi.js";
 import * as wpMetaEvents from "./strategies/wpMetaEvents.js";
 import * as jaffaCinema from "./strategies/jaffaCinema.js";
+import * as wpAuto from "./strategies/wpAuto.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -22,6 +23,7 @@ const strategies = {
   [listingDetailAi.name]: listingDetailAi,
   [wpMetaEvents.name]: wpMetaEvents,
   [jaffaCinema.name]: jaffaCinema,
+  [wpAuto.name]: wpAuto,
 };
 
 const args = process.argv.slice(2);
