@@ -6,12 +6,22 @@ import { decodeEntities, israelISO, canonTitle } from "../lib/util.js";
 
 export const name = "jaffa-cinema";
 
+// Films carry subtitle suffixes the calendar omits ("– Heb subs", "Eng subs",
+// "כתוביות אנגלית"). Strip them so titles match on the core film name.
+const filmKey = (s) =>
+  canonTitle(
+    decodeEntities(s)
+      .replace(/[–\-|]\s*(heb|eng|english|hebrew)?\s*subs?.*$/i, "")
+      .replace(/כתוביות.*$/, "")
+      .trim()
+  );
+
 export async function scrape(source) {
   const base = source.config.apiBase;
 
   // Map film name -> poster image, from the screening post type
-  const posters = new Map();
-  for (let page = 1; page <= 4; page++) {
+  const posters = new Map(); // key -> img
+  for (let page = 1; page <= 7; page++) {
     let films;
     try {
       films = await fetchJson(
@@ -24,11 +34,21 @@ export async function scrape(source) {
         f._embedded?.["wp:featuredmedia"]?.[0]?.source_url ||
         f.yoast_head_json?.og_image?.[0]?.url ||
         null;
-      const key = canonTitle(decodeEntities(f.title?.rendered || ""));
+      const key = filmKey(f.title?.rendered || "");
       if (key && img && !posters.has(key)) posters.set(key, img);
     }
     if (films.length < 100) break;
   }
+
+  // exact key, else fuzzy: a stored key that contains (or is contained by) the film key
+  const lookupPoster = (film) => {
+    const k = filmKey(film);
+    if (posters.has(k)) return posters.get(k);
+    if (k.length >= 5) {
+      for (const [pk, img] of posters) if (pk.includes(k) || k.includes(pk)) return img;
+    }
+    return null;
+  };
 
   // Showtimes from the calendar post type (recently published ≈ upcoming)
   const cal = await fetchJson(
@@ -49,7 +69,7 @@ export async function scrape(source) {
       startsAt: israelISO(y, mo, d, hh, mm),
       bookingUrl: c.link,
       eventUrl: c.link,
-      imageUrl: posters.get(canonTitle(film)) || null,
+      imageUrl: lookupPoster(film),
       lang: "he",
       confidence: 1.0,
     });

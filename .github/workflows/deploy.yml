@@ -3,7 +3,7 @@ name: Deploy site to Netlify
 on:
   push:
     branches: [main]
-    paths: ["web/**"]
+    paths: ["web/**", "netlify/**", "netlify.toml"]
   workflow_dispatch: {}
 
 jobs:
@@ -19,4 +19,4 @@ jobs:
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: netlify deploy --dir=web --prod --message "deploy ${{ github.sha }}"
+        run: netlify deploy --dir=web --functions=netlify/functions --prod --message "deploy ${{ github.sha }}"

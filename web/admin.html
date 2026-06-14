@@ -43,6 +43,7 @@
     </div>
     <div class="field"><label>Admin password</label><input id="fPass" type="password" /></div>
     <button class="btn" id="addBtn">Add site</button>
+    <button class="mini" id="scrapeBtn" style="margin-inline-start:8px">↻ Scan now</button>
     <div id="msg"></div>
     <p style="color:var(--muted);font-size:13px">
       New sites use the automatic extraction ladder (structured data → AI). Events appear
@@ -87,16 +88,45 @@
         const out = await rpc("add_source", { secret: pass, p_id: id, p_name: name, p_url: url, p_venue: $("#fVenue").value.trim(), p_city: $("#fCity").value.trim(), p_category: $("#fCat").value });
         if (out === "ok") {
           localStorage.setItem("kt-admin", pass);
-          msg.textContent = `✓ added as "${id}" — events will appear after the next scan`;
-          msg.style.color = "var(--free)";
           $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = "";
           loadSources();
+          // kick off an immediate scrape so the new place fills in within ~2 min
+          msg.textContent = `✓ added as "${id}" — starting a scan now…`;
+          msg.style.color = "var(--free)";
+          try {
+            const sr = await fetch("/.netlify/functions/scrape-now", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ secret: pass }),
+            });
+            const sj = await sr.json().catch(() => ({}));
+            msg.textContent = sr.ok
+              ? `✓ "${id}" added — scan started, events appear in ~2 minutes`
+              : `✓ "${id}" added. Auto-scan unavailable (${sj.error || sr.status}); it will scan on the next schedule.`;
+          } catch {
+            msg.textContent = `✓ "${id}" added — will appear after the next scheduled scan`;
+          }
         } else {
           msg.textContent = typeof out === "string" ? out : (out.message || JSON.stringify(out));
           msg.style.color = "#ff7a7a";
         }
       } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
       $("#addBtn").disabled = false;
+    };
+
+    $("#scrapeBtn").onclick = async () => {
+      const pass = $("#fPass").value, msg = $("#msg");
+      if (!pass) { msg.textContent = "enter the admin password first"; msg.style.color = "#ff7a7a"; return; }
+      msg.textContent = "starting a scan…"; msg.style.color = "var(--muted)";
+      try {
+        const sr = await fetch("/.netlify/functions/scrape-now", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secret: pass }),
+        });
+        const sj = await sr.json().catch(() => ({}));
+        msg.textContent = sr.ok ? "✓ scan started — new events appear in ~2 minutes" : `failed: ${sj.error || sr.status}`;
+        msg.style.color = sr.ok ? "var(--free)" : "#ff7a7a";
+        if (sr.ok) localStorage.setItem("kt-admin", pass);
+      } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
     };
 
     async function loadSources() {
