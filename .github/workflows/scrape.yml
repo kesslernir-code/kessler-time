@@ -26,6 +26,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node scraper/index.js
       - name: Run social discovery
+        # once a day only (04:00 UTC) or on manual run — Apify free tier is small
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * *'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
