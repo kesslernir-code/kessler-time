@@ -37,6 +37,11 @@ body {
 .add-link { color: var(--accent); }
 .social-link { color: var(--accent-2); border-color: #2c3a5a; }
 .radar-title { margin: 16px 0 2px; font-size: 22px; font-weight: 800; }
+
+/* Under-radar grid: rectangular (landscape) picture cards, a denser grid */
+.social-page .cards { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.social-page .card .img { aspect-ratio: 16 / 10; }
+@media (max-width: 620px) { .social-page .cards { grid-template-columns: 1fr; } }
 .logo-wrap { display: flex; align-items: center; gap: 12px; }
 .logo-icon { width: 42px; height: 42px; border-radius: 10px; display: block; }
 .logo { font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
