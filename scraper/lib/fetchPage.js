@@ -10,7 +10,9 @@ export async function fetchPage(url, { retries = 1, timeoutMs = 30000 } = {}) {
         headers: {
           "User-Agent": UA,
           "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.5",
-          Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+          // must match what a real browser sends for a page — some strict servers
+          // (openresty/WAF) return 415 if "application/json" appears here
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         },
         redirect: "follow",
         signal: AbortSignal.timeout(timeoutMs),

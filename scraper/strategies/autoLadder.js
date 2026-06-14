@@ -43,7 +43,10 @@ function jsonLdEvents(html, source) {
 
 function looksLikeJsShell(html) {
   const text = stripHtml(html);
-  return html.length > 5000 && text.length < 400;
+  // very little visible text relative to a real page, OR a known "please wait /
+  // verifying" bot-challenge interstitial — either way, try rendering
+  if (text.length < 400) return true;
+  return /רק רגע|נא להמתין|מאמתים את הבקשה|just a moment|checking your browser|enable javascript/i.test(text);
 }
 
 async function renderWithPuppeteer(url) {
