@@ -26,14 +26,21 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node scraper/index.js
       - name: Run social discovery
-        # once a day only (04:00 UTC) or on manual run — Apify free tier is small
+        # Apify free tier is ~$5/mo and each search run is ~$0.30, so run only
+        # twice a week (Sun & Wed) — or any manual run. Telegram is free.
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * *'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: node scraper/discover.js
+        run: |
+          DOW=$(date -u +%u)   # 1=Mon .. 7=Sun
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$DOW" = "7" ] || [ "$DOW" = "3" ]; then
+            node scraper/discover.js
+          else
+            echo "skipping discovery today (runs Sun & Wed to stay within Apify free tier)"
+          fi
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
