@@ -62,17 +62,21 @@ ${list}`;
  * Returns Map(key -> true/false).
  */
 export async function filterUnderRadar(items) {
-  if (!items.length) return new Map();
-  const list = items.map((it) => `### ${it.key}\n${it.title}\n@ ${it.where || "?"}`).join("\n\n");
+  // returns a boolean[] aligned to `items` (true = keep). Uses short numeric
+  // keys so the model echoes them back reliably.
+  if (!items.length) return [];
+  const list = items.map((it, i) => `### ${i}\n${it.title}\n@ ${it.where || "?"}`).join("\n\n");
   const prompt = `Below are events found by searching Facebook. Keep ONLY genuine culture / nightlife / arts happenings that fit an "under the radar" events guide: parties, raves, DJ nights, club nights, live music, concerts, gigs, gallery openings, art exhibitions, performances, theater, dance, film screenings, festivals, special bar/cultural events.
 
-REJECT (keep=false): religious services/prayers/minyan, kids' or children's classes, language courses, lessons/workshops that are courses, business/marketing promos, food/restaurant/bakery promotions, real-estate, sports games, networking/business meetups, generic recurring non-events, anything not a cultural/nightlife happening.
+REJECT (keep=false): religious services/prayers/minyan/shul, kids' or children's classes, language courses, lessons/courses, business/marketing promos, food/restaurant/bakery promotions, real-estate, sports games, networking/business meetups, generic recurring non-events, anything that is not a cultural or nightlife happening.
 
-Return ONLY a JSON array: [{"key":"...","keep":true/false}]
+Return ONLY a JSON array with one object per item, by its number:
+[{"i":0,"keep":true/false}, ...]
 
 ${list}`;
   const out = parseJsonArray(await ask(prompt, 4000));
-  return new Map(out.map((o) => [o.key, o.keep === true]));
+  const map = new Map(out.map((o) => [Number(o.i), o.keep === true]));
+  return items.map((_, i) => map.get(i) !== false); // default keep if model omitted one
 }
 
 /**

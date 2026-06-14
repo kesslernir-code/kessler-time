@@ -63,8 +63,8 @@ export async function discover(source, log = console.error) {
 
   // AI relevance filter — keep only genuine under-radar culture/nightlife events
   if (out.length && aiConfigured()) {
-    const keep = await filterUnderRadar(out.map((e) => ({ key: e.occurrenceKey, title: e.title, where: e.where })));
-    const filtered = out.filter((e) => keep.get(e.occurrenceKey) !== false);
+    const keep = await filterUnderRadar(out.map((e) => ({ title: e.title, where: e.where })));
+    const filtered = out.filter((_, i) => keep[i]);
     log(`  [${source.id}] after relevance filter: ${filtered.length}`);
     return filtered;
   }
