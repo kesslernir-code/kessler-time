@@ -1,5 +1,6 @@
 // Claude API via plain fetch. Used only where structured strategies can't get a field.
 const MODEL = "claude-haiku-4-5-20251001"; // cheap + plenty for extraction
+const VISION_MODEL = "claude-sonnet-4-6"; // reads event posters — Sonnet for accurate Hebrew OCR
 
 export const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -20,6 +21,42 @@ async function ask(prompt, maxTokens = 4000) {
   if (!res.ok) throw new Error(`Claude API ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
   return data.content.map((b) => b.text || "").join("");
+}
+
+async function askVision(content, maxTokens = 4000) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: VISION_MODEL, max_tokens: maxTokens, messages: [{ role: "user", content }] }),
+  });
+  if (!res.ok) throw new Error(`Claude vision ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return (await res.json()).content.map((b) => b.text || "").join("");
+}
+
+/**
+ * Read event POSTER images (Wix galleries, flyers) with Claude vision and
+ * extract the event from each. Returns [{imageUrl, title, date, time, where, price_text, is_free}].
+ */
+export async function extractEventsFromImages(imageUrls, { sourceName, todayISO }) {
+  if (!imageUrls.length) return [];
+  const content = [{
+    type: "text",
+    text: `Today is ${todayISO} (Israel). The following are event POSTER images from "${sourceName}" (mostly Hebrew). Read each poster and extract the event it advertises. Return ONLY a JSON array, one object per image by its index:
+[{"i":0,"is_event":true/false,"title":"...","date":"YYYY-MM-DD" or null,"time":"HH:MM" or null,"where":"..." or null,"price_text":"..." or null,"is_free":true/false/null}]
+Set is_event=false for logos, decorations, or images that are not a specific event with a real future date.`,
+  }];
+  imageUrls.forEach((url, i) => {
+    content.push({ type: "text", text: `IMAGE ${i}:` });
+    content.push({ type: "image", source: { type: "url", url } });
+  });
+  const out = parseJsonArray(await askVision(content, 6000));
+  return out
+    .filter((o) => o.is_event && /^\d{4}-\d{2}-\d{2}$/.test(o.date || "") && imageUrls[o.i])
+    .map((o) => ({ ...o, imageUrl: imageUrls[o.i] }));
 }
 
 function parseJsonArray(text) {
@@ -66,9 +103,11 @@ export async function filterUnderRadar(items) {
   // keys so the model echoes them back reliably.
   if (!items.length) return [];
   const list = items.map((it, i) => `### ${i}\n${it.title}\n@ ${it.where || "?"}`).join("\n\n");
-  const prompt = `Below are events found by searching Facebook. Keep ONLY genuine culture / nightlife / arts happenings that fit an "under the radar" events guide: parties, raves, DJ nights, club nights, live music, concerts, gigs, gallery openings, art exhibitions, performances, theater, dance, film screenings, festivals, special bar/cultural events.
+  const prompt = `Below are events found by searching Facebook. This is an "under the radar" culture guide with a WIDE scope — keep anything that is a real happening a person can show up to and attend: parties, raves, DJ/club nights, live music, concerts, gigs, gallery openings, art exhibitions, performances, theater, dance, film screenings, festivals, lectures, talks, workshops, D&D / tabletop / board-game nights, jams, open mics, markets/fairs, community & social meetups, special bar/cultural events, courses with a specific date.
 
-REJECT (keep=false): religious services/prayers/minyan/shul, kids' or children's classes, language courses, lessons/courses, business/marketing promos, food/restaurant/bakery promotions, real-estate, sports games, networking/business meetups, generic recurring non-events, anything that is not a cultural or nightlife happening.
+REJECT (keep=false) ONLY clear non-events: religious prayer services (minyan/shul/mass), classes for young children, pure product/retail/food promotions (e.g. a bakery opening), real-estate, business/B2B sales or networking, sports matches, and generic always-open / no-real-date listings.
+
+When unsure, KEEP it (wide scope).
 
 Return ONLY a JSON array with one object per item, by its number:
 [{"i":0,"keep":true/false}, ...]

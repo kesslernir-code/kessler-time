@@ -8,11 +8,20 @@ import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 
-/** Generic image backfill: events with no image but an event page get its og:image. */
-async function backfillImages(events, cap = 12) {
+/** An image reused across many events in one source is a banner/logo, not a
+ *  per-event poster — null it so a real image (or clean placeholder) takes over. */
+function dropSharedImages(events) {
+  const freq = new Map();
+  for (const e of events) if (e.image_url) freq.set(e.image_url, (freq.get(e.image_url) || 0) + 1);
+  for (const e of events) if (e.image_url && freq.get(e.image_url) >= 3) e.image_url = null;
+}
+
+/** Generic image backfill: events with no image but a REAL event page get its
+ *  og:image. Skips events whose link is just the source homepage (no per-event image). */
+async function backfillImages(events, source, cap = 12) {
   let n = 0;
   for (const e of events) {
-    if (e.image_url || !e.event_url) continue;
+    if (e.image_url || !e.event_url || e.event_url === source.url) continue;
     if (n >= cap) break;
     n++;
     const img = await fetchOgImage(e.event_url);
@@ -115,7 +124,8 @@ for (const source of sources) {
     if (!strategy) throw new Error(`unknown strategy "${source.strategy}"`);
     const raw = await strategy.scrape(source);
     const events = normalize(raw, source);
-    await backfillImages(events); // og:image fallback when the API/feed gave no picture
+    dropSharedImages(events); // strip reused banners/logos before backfilling
+    await backfillImages(events, source); // og:image fallback when the API/feed gave no picture
     await enrichPrices(events); // fills prices from ticket pages when the venue page omits them
     run.events_found = raw.length;
     run.events_upserted = events.length;

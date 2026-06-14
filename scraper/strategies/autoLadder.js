@@ -5,9 +5,10 @@
 //      for JS-shell sites that return an empty HTML skeleton.
 import { fetchText } from "../lib/fetchPage.js";
 import { stripHtml, israelISO, reconcilePrice, todayISODate, shortHash } from "../lib/util.js";
-import { extractEventsFromPage, aiConfigured } from "../lib/ai.js";
+import { extractEventsFromPage, extractEventsFromImages, aiConfigured } from "../lib/ai.js";
 
 export const name = "auto-ladder";
+
 
 function jsonLdEvents(html, source) {
   const blocks = [...html.matchAll(/<script type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g)];
@@ -44,7 +45,7 @@ function jsonLdEvents(html, source) {
 async function renderWithPuppeteer(url) {
   try {
     const { renderPage } = await import("../lib/render.js");
-    return (await renderPage(url, { timeoutMs: 60000 })).html;
+    return await renderPage(url, { timeoutMs: 60000, scroll: true }); // {text, html, images}
   } catch (e) {
     return null; // no Chrome available — stay on the non-rendered rungs
   }
@@ -103,9 +104,33 @@ export async function scrape(source, log = console.error) {
   log(`  [${source.id}] static empty — rendering with browser…`);
   const rendered = await renderWithPuppeteer(source.url);
   if (!rendered) { log(`  [${source.id}] render unavailable`); return []; }
-  events = jsonLdEvents(rendered, source);
+  events = jsonLdEvents(rendered.html, source);
   if (events.length) { log(`  [${source.id}] ladder rung: render+json-ld (${events.length})`); return events; }
-  events = await aiExtract(rendered);
-  log(`  [${source.id}] ladder rung: render+ai (${events.length})`);
-  return events;
+  events = await aiExtract(rendered.html);
+  if (events.length) { log(`  [${source.id}] ladder rung: render+ai (${events.length})`); return events; }
+
+  // Rung 4: vision — the page's events are poster IMAGES with text baked in
+  // (Wix/Webflow galleries, flyers). Read the largest images with Claude vision.
+  const posters = (rendered.images || []).slice(0, 10);
+  if (!posters.length) { log(`  [${source.id}] no posters to read`); return []; }
+  const raw = await extractEventsFromImages(posters, { sourceName: source.name, todayISO: todayISODate() });
+  log(`  [${source.id}] ladder rung: vision (${raw.length} from ${posters.length} posters)`);
+  return raw.map((e) => {
+    const [y, mo, d] = e.date.split("-").map(Number);
+    const [hh, mm] = (e.time || "20:00").split(":").map(Number);
+    const { priceText, isFree } = reconcilePrice(e.price_text, e.is_free);
+    return {
+      occurrenceKey: shortHash(e.title + e.date),
+      title: e.title,
+      description: null,
+      startsAt: israelISO(y, mo, d, hh, mm),
+      where: e.where || null,
+      priceText, isFree,
+      bookingUrl: source.url,
+      eventUrl: source.url,
+      imageUrl: e.imageUrl,
+      lang: "he",
+      confidence: 0.7,
+    };
+  });
 }

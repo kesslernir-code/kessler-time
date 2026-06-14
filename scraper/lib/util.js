@@ -17,9 +17,13 @@ export function jerusalemOffset(date = new Date()) {
   return m ? m[1] : "+02:00";
 }
 
-/** Build an ISO timestamp for a wall-clock time in Israel. */
+/** Build an ISO timestamp for a wall-clock time in Israel. Returns null on bad input. */
 export function israelISO(y, mo, d, hh = 0, mm = 0) {
+  if (!Number.isFinite(hh)) hh = 20;
+  if (!Number.isFinite(mm)) mm = 0;
+  if (![y, mo, d].every(Number.isFinite)) return null;
   const approx = new Date(Date.UTC(y, mo - 1, d, hh, mm));
+  if (Number.isNaN(approx.getTime())) return null;
   return `${pad(y, 4)}-${pad(mo)}-${pad(d)}T${pad(hh)}:${pad(mm)}:00${jerusalemOffset(approx)}`;
 }
 
