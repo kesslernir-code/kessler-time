@@ -3,6 +3,7 @@
 // galleries, performances, club nights) and keeps the upcoming Israeli ones.
 // Finds events from organizers we don't even know about.
 import { runActor } from "../lib/apify.js";
+import { filterUnderRadar, aiConfigured } from "../lib/ai.js";
 
 export const platform = "fb-search";
 
@@ -59,5 +60,13 @@ export async function discover(source, log = console.error) {
     });
   }
   log(`  [${source.id}] fb-search upcoming Israeli: ${out.length}`);
+
+  // AI relevance filter — keep only genuine under-radar culture/nightlife events
+  if (out.length && aiConfigured()) {
+    const keep = await filterUnderRadar(out.map((e) => ({ key: e.occurrenceKey, title: e.title, where: e.where })));
+    const filtered = out.filter((e) => keep.get(e.occurrenceKey) !== false);
+    log(`  [${source.id}] after relevance filter: ${filtered.length}`);
+    return filtered;
+  }
   return out;
 }

@@ -56,6 +56,26 @@ ${list}`;
 }
 
 /**
+ * Relevance filter for the autonomous discovery feed. FB event search is broad
+ * and drags in noise (religious services, kids classes, business promos). Keep
+ * only genuine under-radar culture/nightlife happenings.
+ * Returns Map(key -> true/false).
+ */
+export async function filterUnderRadar(items) {
+  if (!items.length) return new Map();
+  const list = items.map((it) => `### ${it.key}\n${it.title}\n@ ${it.where || "?"}`).join("\n\n");
+  const prompt = `Below are events found by searching Facebook. Keep ONLY genuine culture / nightlife / arts happenings that fit an "under the radar" events guide: parties, raves, DJ nights, club nights, live music, concerts, gigs, gallery openings, art exhibitions, performances, theater, dance, film screenings, festivals, special bar/cultural events.
+
+REJECT (keep=false): religious services/prayers/minyan, kids' or children's classes, language courses, lessons/workshops that are courses, business/marketing promos, food/restaurant/bakery promotions, real-estate, sports games, networking/business meetups, generic recurring non-events, anything not a cultural/nightlife happening.
+
+Return ONLY a JSON array: [{"key":"...","keep":true/false}]
+
+${list}`;
+  const out = parseJsonArray(await ask(prompt, 4000));
+  return new Map(out.map((o) => [o.key, o.keep === true]));
+}
+
+/**
  * Social-post triage + extraction. Social feeds are noisy (announcements, memes,
  * recaps). For each post decide if it announces a SPECIFIC upcoming event and, if
  * so, pull the details. Returns Map(key -> {is_event, title, date, time, where, price_text, is_free, booking_url}).
