@@ -6,8 +6,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { shortHash } from "./lib/util.js";
 import { dbConfigured, upsertEvents, logRun, getSocialSources } from "./lib/db.js";
 import * as telegram from "./discovery/telegram.js";
+import * as facebook from "./discovery/facebook.js";
+import * as instagram from "./discovery/instagram.js";
 
-const platforms = { [telegram.platform]: telegram };
+const platforms = {
+  [telegram.platform]: telegram,
+  [facebook.platform]: facebook,
+  [instagram.platform]: instagram,
+};
 
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run") || !dbConfigured();
