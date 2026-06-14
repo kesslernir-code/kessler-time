@@ -9,11 +9,12 @@ import { knownEventUrls } from "../lib/db.js";
 export const platform = "instagram";
 
 export async function discover(source, log = console.error) {
+  const newerThan = new Date(Date.now() - 35 * 864e5).toISOString().slice(0, 10); // YYYY-MM-DD
   const items = await runActor("apify/instagram-scraper", {
     directUrls: [`https://www.instagram.com/${source.handle}/`],
     resultsType: "posts",
     resultsLimit: 30,
-    onlyPostsNewerThan: "35 days",
+    onlyPostsNewerThan: newerThan,
   });
   log(`  [${source.id}] instagram posts: ${items.length}`);
 
