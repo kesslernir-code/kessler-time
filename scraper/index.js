@@ -6,6 +6,19 @@ import { shortHash, jerusalemOffset, canonTitle } from "./lib/util.js";
 import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
+import { fetchOgImage } from "./lib/fetchPage.js";
+
+/** Generic image backfill: events with no image but an event page get its og:image. */
+async function backfillImages(events, cap = 12) {
+  let n = 0;
+  for (const e of events) {
+    if (e.image_url || !e.event_url) continue;
+    if (n >= cap) break;
+    n++;
+    const img = await fetchOgImage(e.event_url);
+    if (img) e.image_url = img;
+  }
+}
 import * as wpEventsApi from "./strategies/wpEventsApi.js";
 import * as radicalCalendar from "./strategies/radicalCalendar.js";
 import * as wpApiAi from "./strategies/wpApiAi.js";
@@ -102,6 +115,7 @@ for (const source of sources) {
     if (!strategy) throw new Error(`unknown strategy "${source.strategy}"`);
     const raw = await strategy.scrape(source);
     const events = normalize(raw, source);
+    await backfillImages(events); // og:image fallback when the API/feed gave no picture
     await enrichPrices(events); // fills prices from ticket pages when the venue page omits them
     run.events_found = raw.length;
     run.events_upserted = events.length;

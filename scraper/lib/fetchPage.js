@@ -29,3 +29,18 @@ export async function fetchPage(url, { retries = 1, timeoutMs = 30000 } = {}) {
 
 export const fetchJson = async (url, opts) => (await fetchPage(url, opts)).json();
 export const fetchText = async (url, opts) => (await fetchPage(url, opts)).text();
+
+/** Read a page's og:image (poster). Generic fallback when an API gives no image. */
+export async function fetchOgImage(url) {
+  try {
+    const html = await fetchText(url, { retries: 0, timeoutMs: 15000 });
+    const m =
+      html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    const url2 = m && m[1];
+    if (!url2 || /logo|placeholder|sprite|favicon|default|blank/i.test(url2)) return null;
+    return url2.replace(/&amp;/g, "&");
+  } catch {
+    return null;
+  }
+}
