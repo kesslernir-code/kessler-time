@@ -11,6 +11,8 @@ import * as radicalCalendar from "./strategies/radicalCalendar.js";
 import * as wpApiAi from "./strategies/wpApiAi.js";
 import * as autoLadder from "./strategies/autoLadder.js";
 import * as listingDetailAi from "./strategies/listingDetailAi.js";
+import * as wpMetaEvents from "./strategies/wpMetaEvents.js";
+import * as jaffaCinema from "./strategies/jaffaCinema.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -18,6 +20,8 @@ const strategies = {
   [wpApiAi.name]: wpApiAi,
   [autoLadder.name]: autoLadder,
   [listingDetailAi.name]: listingDetailAi,
+  [wpMetaEvents.name]: wpMetaEvents,
+  [jaffaCinema.name]: jaffaCinema,
 };
 
 const args = process.argv.slice(2);
