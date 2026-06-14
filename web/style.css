@@ -35,6 +35,8 @@ body {
 }
 .top-link:hover { color: var(--text); border-color: var(--accent-2); }
 .add-link { color: var(--accent); }
+.social-link { color: var(--accent-2); border-color: #2c3a5a; }
+.radar-title { margin: 16px 0 2px; font-size: 22px; font-weight: 800; }
 .logo-wrap { display: flex; align-items: center; gap: 12px; }
 .logo-icon { width: 42px; height: 42px; border-radius: 10px; display: block; }
 .logo { font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }

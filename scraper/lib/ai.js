@@ -56,6 +56,31 @@ ${list}`;
 }
 
 /**
+ * Social-post triage + extraction. Social feeds are noisy (announcements, memes,
+ * recaps). For each post decide if it announces a SPECIFIC upcoming event and, if
+ * so, pull the details. Returns Map(key -> {is_event, title, date, time, where, price_text, is_free, booking_url}).
+ */
+export async function extractSocialEvents(items, todayISO) {
+  const list = items
+    .map((it) => `### key: ${it.key}\nPOSTED: ${it.posted}\n${it.links?.length ? `LINKS: ${it.links.slice(0, 4).join(" , ")}\n` : ""}TEXT:\n${it.text.slice(0, 1100)}`)
+    .join("\n\n");
+  const prompt = `Today is ${todayISO} (Israel). Below are social-media posts (mostly Hebrew) from culture/nightlife channels. Many are NOT event announcements (general updates, photos, memes, recaps of past events, calls for artists). For EACH post decide whether it announces ONE specific UPCOMING event with a real date, and if so extract its details.
+
+Rules:
+- is_event=false for: past events, recaps, general info, merch, multiple-unrelated-events digests, anything without a concrete future date.
+- The post date (POSTED) is when it was written, NOT the event date — find the event date in the text ("מחר", "שישי הקרוב", "14.6", "במוצ״ש"). Resolve relative dates against today; pick the next future occurrence.
+- "where" = the venue/location named in the text (free text, may be a place, address, or "סוד/יודיע בהמשך").
+- booking_url = a registration/tickets link from LINKS if clearly for this event, else null.
+
+Return ONLY a JSON array, one object per post:
+[{"key":"...","is_event":true/false,"title":"short event title","date":"YYYY-MM-DD" or null,"time":"HH:MM" or null,"where":"..." or null,"price_text":"..." or null,"is_free":true/false/null,"booking_url":"..." or null}]
+
+${list}`;
+  const out = parseJsonArray(await ask(prompt, 8000));
+  return new Map(out.map((o) => [o.key, o]));
+}
+
+/**
  * Generic last-resort extractor: whole-page text -> events. Used by the auto
  * ladder for future sources that have no structured data.
  */

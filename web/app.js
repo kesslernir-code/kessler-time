@@ -22,6 +22,7 @@
       tickets: "כרטיסים",
       recs: "המלצות",
       addPlace: "+ הוספת מקום",
+      social: "🔦 מתחת לרדאר",
       cat_fringe: "אירועי שוליים",
       cat_club: "מועדונים",
       cat_mainstream: "מיינסטרים",
@@ -46,6 +47,7 @@
       tickets: "Tickets",
       recs: "Recommendations",
       addPlace: "+ Add place",
+      social: "🔦 Under the radar",
       cat_fringe: "Fringe",
       cat_club: "Clubs",
       cat_mainstream: "Mainstream",
@@ -131,7 +133,7 @@
       return;
     }
     const since = new Date(Date.now() - 3 * 3600e3).toISOString();
-    const cols = "id,source_id,title,description,starts_at,venue,city,price_text,is_free,booking_url,event_url,image_url";
+    const cols = "id,source_id,title,description,starts_at,venue,city,price_text,is_free,booking_url,event_url,image_url,kind";
     const url = (extra) =>
       `${CFG.SUPABASE_URL}/rest/v1/events?select=${cols}${extra}` +
       `&starts_at=gte.${encodeURIComponent(since)}&order=starts_at.asc&limit=600`;
@@ -140,7 +142,7 @@
       let res = await fetch(url(",category"), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) res = await fetch(url(""), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) throw new Error(res.status);
-      events = await res.json();
+      events = (await res.json()).filter((e) => e.kind !== "social"); // social events live on /social
       renderCityChips();
       renderCatChips();
       render();

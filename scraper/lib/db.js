@@ -68,6 +68,16 @@ export async function updateEvent(id, patch) {
   });
 }
 
+/** Enabled social discovery channels, or [] if the table doesn't exist yet. */
+export async function getSocialSources() {
+  if (!dbConfigured()) return [];
+  try {
+    return await rest("social_sources?enabled=eq.true&select=*&order=added_at.asc");
+  } catch {
+    return [];
+  }
+}
+
 export async function logRun(run) {
   if (!dbConfigured()) return;
   await rest("scrape_runs", {
