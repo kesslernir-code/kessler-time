@@ -30,6 +30,30 @@ export async function fetchPage(url, { retries = 1, timeoutMs = 30000 } = {}) {
 export const fetchJson = async (url, opts) => (await fetchPage(url, opts)).json();
 export const fetchText = async (url, opts) => (await fetchPage(url, opts)).text();
 
+/** Directory info for a place page: { image, description, phone } (best-effort). */
+export async function fetchPageInfo(url) {
+  try {
+    const html = await fetchText(url, { retries: 0, timeoutMs: 15000 });
+    const og = (p) => html.match(new RegExp(`<meta[^>]+property=["']og:${p}["'][^>]+content=["']([^"']+)`, "i"))?.[1];
+    const metaDesc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i)?.[1];
+    const image = og("image") || null;
+    const rawDesc = (og("description") || metaDesc || "").slice(0, 400);
+    const phone =
+      (html.match(/href=["']tel:([+0-9\-\s().]{7,})["']/i)?.[1] ||
+        html.match(/\b0\d{1,2}-?\d{7}\b/)?.[0] ||
+        html.match(/\+972[-\s]?\d[-\s]?\d{7}/)?.[0] ||
+        "").trim();
+    const { decodeEntities } = await import("./util.js");
+    return {
+      image: image && !/logo|placeholder|sprite/i.test(image) ? image.replace(/&amp;/g, "&") : null,
+      description: rawDesc ? decodeEntities(rawDesc) : null,
+      phone: phone || null,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /** Read a page's og:image (poster). Generic fallback when an API gives no image. */
 export async function fetchOgImage(url) {
   try {

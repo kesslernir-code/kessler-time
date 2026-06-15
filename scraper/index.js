@@ -3,10 +3,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
 import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent } from "./lib/db.js";
+import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
-import { fetchOgImage } from "./lib/fetchPage.js";
+import { fetchOgImage, fetchPageInfo } from "./lib/fetchPage.js";
+
+// "Directory" categories: shown as info cards (image/phone/name/description/link),
+// NOT scraped for events.
+const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
 
 /** An image reused across many events in one source is a banner/logo, not a
  *  per-event poster — null it so a real image (or clean placeholder) takes over. */
@@ -130,6 +134,22 @@ const socialOk = Boolean(only) || process.env.SCRAPE_SOCIAL === "1";
 
 for (const source of sources) {
   if (only && source.id !== only) continue;
+
+  // Directory place (bar/restaurant/festival): refresh its info card, no events.
+  if (DIRECTORY_CATS.has(source.category)) {
+    if (DRY) { console.log(`\n=== ${source.name} [directory:${source.category}] — info card, no events`); continue; }
+    try {
+      const info = await fetchPageInfo(source.url);
+      await updateSourceRow(source.id, info);
+      await deleteSourceEvents(source.id); // drop any stale events from before it was a directory
+      console.log(`${source.id}: directory info refreshed (img:${!!info.image} phone:${!!info.phone})`);
+      await logRun({ source_id: source.id, strategy: "directory", ok: true, events_found: 0, events_upserted: 0, duration_ms: 0, error: null });
+    } catch (e) {
+      console.error(`${source.id} directory FAILED: ${e.message}`);
+    }
+    continue;
+  }
+
   const social = detectSocialUrl(source.url); // {platform,handle} | null
   if (social && !socialOk) {
     console.error(`${source.id}: skipped (social venue runs on the daily scan only)`);

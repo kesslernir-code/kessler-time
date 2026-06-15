@@ -78,6 +78,22 @@ export async function getSocialSources() {
   }
 }
 
+/** Patch a source row (e.g. directory info: image/description/phone). */
+export async function updateSourceRow(id, patch) {
+  if (!dbConfigured() || !Object.keys(patch).length) return;
+  await rest(`sources?id=eq.${id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Delete all events for a source (used when a place becomes a directory listing). */
+export async function deleteSourceEvents(id) {
+  if (!dbConfigured()) return;
+  await rest(`events?source_id=eq.${id}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+}
+
 export async function logRun(run) {
   if (!dbConfigured()) return;
   await rest("scrape_runs", {

@@ -86,6 +86,8 @@
   let freeOnly = false;
   let query = "";
   const CATEGORIES = ["fringe", "bohemia", "festival", "cinema", "bars", "restaurants", "club", "secret", "other"];
+  // shown as info-card listings, not event feeds
+  const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
 
   // Toggle val in a set; passing null clears the set ("all" chip).
   const toggle = (set, val) => {
@@ -120,16 +122,21 @@
   async function loadSources() {
     if (!configured) return;
     try {
-      const res = await fetch(
+      let res = await fetch(
+        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name,category,url,image,description,phone&order=added_at.asc`,
+        { headers: { apikey: CFG.SUPABASE_ANON_KEY } }
+      );
+      if (!res.ok) res = await fetch( // before schema9: no image/description/phone columns
         `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name,category&order=added_at.asc`,
         { headers: { apikey: CFG.SUPABASE_ANON_KEY } }
       );
       const rows = await res.json();
       if (Array.isArray(rows) && rows.length) {
         SOURCES = Object.fromEntries(
-          rows.map((r) => [r.id, { ...splitName(r.name), category: r.category || "fringe" }])
+          rows.map((r) => [r.id, { ...splitName(r.name), category: r.category || "fringe", url: r.url, image: r.image, description: r.description, phone: r.phone }])
         );
         renderChips();
+        render();
       }
     } catch {} // chips just stay minimal if the sources table is unreachable
   }
@@ -237,13 +244,57 @@
     return [...days];
   }
 
+  // Directory place card: image, name, phone, description, link to site.
+  function placeCard(id, s) {
+    const a = document.createElement("a");
+    a.className = "card place-card";
+    a.href = s.url || "#"; a.target = "_blank"; a.rel = "noopener";
+    const name = s[lang] || s.he || id;
+    const img = s.image
+      ? `<img loading="lazy" src="${proxyImg(s.image)}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(name)}33>${name[0]}</div>'">`
+      : `<div class="ph" style="background:${hue(name)}33">${name[0]}</div>`;
+    a.innerHTML = `
+      <div class="img">${img}</div>
+      <div class="body">
+        <h3></h3>
+        ${s.phone ? `<a class="phone" href="tel:${s.phone.replace(/[^+0-9]/g, "")}">📞 ${s.phone}</a>` : ""}
+        <p class="desc"></p>
+        <span class="price" style="color:var(--accent-2)">${lang === "he" ? "לאתר ↗" : "Visit ↗"}</span>
+      </div>`;
+    a.querySelector("h3").textContent = name;
+    const d = a.querySelector(".desc"); if (s.description) d.textContent = s.description; else d.remove();
+    a.querySelector(".phone")?.addEventListener("click", (ev) => ev.stopPropagation());
+    return a;
+  }
+
+  // True when the active category filter is only directory categories.
+  const directoryMode = () => catSel.size > 0 && [...catSel].every((c) => DIRECTORY_CATS.has(c));
+
+  function renderDirectory() {
+    const list = $("#list");
+    list.innerHTML = "";
+    const q = query.trim().toLowerCase();
+    const ids = Object.keys(SOURCES).filter(
+      (id) => catSel.has(SOURCES[id].category) &&
+        (!srcSel.size || srcSel.has(id)) &&
+        (!q || ((SOURCES[id].he + " " + SOURCES[id].en + " " + (SOURCES[id].description || "")).toLowerCase().includes(q)))
+    );
+    if (!ids.length) { list.innerHTML = `<div class="state">${t("empty")}</div>`; return; }
+    const grid = document.createElement("div");
+    grid.className = "cards";
+    ids.forEach((id) => grid.appendChild(placeCard(id, SOURCES[id])));
+    list.appendChild(grid);
+  }
+
   function render() {
+    if (directoryMode()) return renderDirectory();
     const list = $("#list");
     list.innerHTML = "";
     const q = query.trim().toLowerCase();
     const days = allowedDays();
     const visible = events.filter(
       (e) =>
+        !DIRECTORY_CATS.has(e.category || "") &&
         (!srcSel.size || srcSel.has(e.source_id)) &&
         (!citySel.size || citySel.has(e.city)) &&
         (!catSel.size || catSel.has(e.category || "fringe")) &&

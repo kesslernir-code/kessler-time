@@ -121,6 +121,9 @@ body {
 .meta .venue { color: var(--accent-2); }
 .price-row { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .price { font-size: 14px; color: var(--text); }
+.phone { color: var(--accent); text-decoration: none; font-size: 13.5px; }
+.phone:hover { text-decoration: underline; }
+.place-card .price { margin-top: auto; }
 .price.free { color: var(--free); font-weight: 600; }
 .tix {
   background: var(--accent); color: #14130c; text-decoration: none; font-size: 12.5px;
