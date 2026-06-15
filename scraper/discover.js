@@ -9,12 +9,14 @@ import * as telegram from "./discovery/telegram.js";
 import * as facebook from "./discovery/facebook.js";
 import * as instagram from "./discovery/instagram.js";
 import * as fbSearch from "./discovery/fbSearch.js";
+import * as facebookGroup from "./discovery/facebookGroup.js";
 
 const platforms = {
   [telegram.platform]: telegram,
   [facebook.platform]: facebook,
   [instagram.platform]: instagram,
   [fbSearch.platform]: fbSearch,
+  [facebookGroup.platform]: facebookGroup,
 };
 
 const args = process.argv.slice(2);

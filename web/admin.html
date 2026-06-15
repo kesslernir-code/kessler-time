@@ -45,6 +45,7 @@
         <option value="other" selected>אחר</option>
       </select>
     </div>
+    <div class="field"><label>מקור ל"מתחת לרדאר" (אופציונלי) — קישור לקבוצת פייסבוק / דף אינסטגרם / ערוץ טלגרם</label><input id="fSocial" placeholder="https://facebook.com/groups/... | instagram.com/... | t.me/..." /></div>
     <div class="field"><label>Admin password</label><input id="fPass" type="password" /></div>
     <button class="btn" id="addBtn">Add site</button>
     <button class="mini" id="scrapeBtn" style="margin-inline-start:8px">↻ Scan now</button>
@@ -72,6 +73,17 @@
       catch { return ""; }
     };
 
+    // Detect a discovery source (FB group / IG / Telegram / FB page) from a pasted URL
+    const detectSocial = (u) => {
+      u = (u || "").trim(); if (!u) return null;
+      let m;
+      if ((m = u.match(/instagram\.com\/([A-Za-z0-9_.]+)/))) return { platform: "instagram", handle: m[1] };
+      if ((m = u.match(/facebook\.com\/groups\/([A-Za-z0-9.]+)/))) return { platform: "fb-group", handle: m[1] };
+      if ((m = u.match(/(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z0-9_]+)/))) return { platform: "telegram", handle: m[1] };
+      if ((m = u.match(/facebook\.com\/([A-Za-z0-9.\-]+)/))) return { platform: "facebook", handle: m[1] };
+      return null;
+    };
+
     async function rpc(fn, args) {
       const res = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
         method: "POST",
@@ -92,7 +104,13 @@
         const out = await rpc("add_source", { secret: pass, p_id: id, p_name: name, p_url: url, p_venue: $("#fVenue").value.trim(), p_city: $("#fCity").value.trim(), p_category: $("#fCat").value });
         if (out === "ok") {
           localStorage.setItem("kt-admin", pass);
-          $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = "";
+          // optional: register an under-radar discovery source from the reference link
+          const ref = detectSocial($("#fSocial").value);
+          if (ref) {
+            const so = await rpc("add_social_source", { secret: pass, p_platform: ref.platform, p_handle: ref.handle, p_city: $("#fCity").value.trim() });
+            if (so !== "ok") alert("מקור מתחת-לרדאר לא נוסף: " + (typeof so === "string" ? so : JSON.stringify(so)));
+          }
+          $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = $("#fSocial").value = "";
           loadSources();
           // kick off an immediate scrape so the new place fills in within ~2 min
           msg.textContent = `✓ added as "${id}" — starting a scan now…`;
