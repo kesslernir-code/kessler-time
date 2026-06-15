@@ -75,6 +75,7 @@
     const C = window.KESSLER_CONFIG;
     const $ = (s) => document.querySelector(s);
     $("#fPass").value = localStorage.getItem("kt-admin") || "";
+    const ACTIONS_URL = "https://github.com/kesslernir-code/kessler-time/actions/workflows/scrape.yml";
 
     const slugify = (url) => {
       try { return new URL(url).hostname.replace(/^www\./, "").split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30); }
@@ -120,20 +121,8 @@
           $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = "";
           loadSources();
           // kick off an immediate scrape so the new place fills in within ~2 min
-          msg.textContent = `✓ added as "${id}" — starting a scan now…`;
+          msg.innerHTML = `✓ נוסף "${id}" — יופיע בסריקה הבאה (3×/יום), או הרץ עכשיו: <a style="color:var(--accent-2)" href="${ACTIONS_URL}" target="_blank">Run workflow ↗</a>`;
           msg.style.color = "var(--free)";
-          try {
-            const sr = await fetch("/.netlify/functions/scrape-now", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ secret: pass }),
-            });
-            const sj = await sr.json().catch(() => ({}));
-            msg.textContent = sr.ok
-              ? `✓ "${id}" added — scan started, events appear in ~2 minutes`
-              : `✓ "${id}" added. Auto-scan unavailable (${sj.error || sr.status}); it will scan on the next schedule.`;
-          } catch {
-            msg.textContent = `✓ "${id}" added — will appear after the next scheduled scan`;
-          }
         } else {
           msg.textContent = typeof out === "string" ? out : (out.message || JSON.stringify(out));
           msg.style.color = "#ff7a7a";
@@ -142,21 +131,7 @@
       $("#addBtn").disabled = false;
     };
 
-    $("#scrapeBtn").onclick = async () => {
-      const pass = $("#fPass").value, msg = $("#msg");
-      if (!pass) { msg.textContent = "enter the admin password first"; msg.style.color = "#ff7a7a"; return; }
-      msg.textContent = "starting a scan…"; msg.style.color = "var(--muted)";
-      try {
-        const sr = await fetch("/.netlify/functions/scrape-now", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ secret: pass }),
-        });
-        const sj = await sr.json().catch(() => ({}));
-        msg.textContent = sr.ok ? "✓ scan started — new events appear in ~2 minutes" : `failed: ${sj.error || sr.status}`;
-        msg.style.color = sr.ok ? "var(--free)" : "#ff7a7a";
-        if (sr.ok) localStorage.setItem("kt-admin", pass);
-      } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
-    };
+    $("#scrapeBtn").onclick = () => window.open(ACTIONS_URL, "_blank", "noopener");
 
     // ---- under-radar discovery sources (link only) ----
     const PLAT_HE = { telegram: "טלגרם", instagram: "אינסטגרם", facebook: "דף פייסבוק", "fb-group": "קבוצת פייסבוק", "fb-search": "חיפוש" };
