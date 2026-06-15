@@ -22,3 +22,14 @@ begin
   on conflict (id) do update set city = excluded.city, enabled = true;
   return 'ok';
 end $$;
+
+-- enable/disable (or effectively remove) an under-radar discovery source
+create or replace function set_social_enabled(secret text, p_id text, p_enabled boolean)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from admin_config where k = 'admin_password' and v = secret) then
+    return 'wrong password';
+  end if;
+  update social_sources set enabled = p_enabled where id = p_id;
+  return 'ok';
+end $$;
