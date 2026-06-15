@@ -23,11 +23,15 @@
       recs: "המלצות",
       addPlace: "+ הוספת מקום",
       social: "🔦 מתחת לרדאר",
-      cat_fringe: "אירועי שוליים",
-      cat_club: "מועדונים",
-      cat_mainstream: "מיינסטרים",
+      cat_fringe: "הופעות שוליים",
+      cat_bohemia: "בוהמיה",
       cat_festival: "פסטיבלים",
-      cat_cinema: "קולנוע",
+      cat_cinema: "קולנועים",
+      cat_bars: "ברים",
+      cat_restaurants: "מסעדות",
+      cat_club: "מועדונים",
+      cat_secret: "סודי",
+      cat_other: "אחר",
     },
     en: {
       tagline: "Upcoming events from the places we love",
@@ -49,10 +53,14 @@
       addPlace: "+ Add place",
       social: "🔦 Under the radar",
       cat_fringe: "Fringe",
-      cat_club: "Clubs",
-      cat_mainstream: "Mainstream",
+      cat_bohemia: "Bohemia",
       cat_festival: "Festivals",
-      cat_cinema: "Cinema",
+      cat_cinema: "Cinemas",
+      cat_bars: "Bars",
+      cat_restaurants: "Restaurants",
+      cat_club: "Clubs",
+      cat_secret: "Secret",
+      cat_other: "Other",
     },
   };
   let lang = localStorage.getItem("kt-lang") || "he";
@@ -77,7 +85,7 @@
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
-  const CATEGORIES = ["fringe", "club", "mainstream", "festival", "cinema"];
+  const CATEGORIES = ["fringe", "bohemia", "festival", "cinema", "bars", "restaurants", "club", "secret", "other"];
 
   // Toggle val in a set; passing null clears the set ("all" chip).
   const toggle = (set, val) => {

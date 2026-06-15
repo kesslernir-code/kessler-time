@@ -34,11 +34,15 @@
     <div class="field"><label>City (optional, in Hebrew — e.g. תל אביב)</label><input id="fCity" /></div>
     <div class="field"><label>Category</label>
       <select id="fCat" style="background:var(--panel-2);border:1px solid #2c3040;color:var(--text);border-radius:8px;padding:9px 12px;font:inherit">
-        <option value="fringe">אירועי שוליים / Fringe</option>
-        <option value="club">מועדון / Club</option>
-        <option value="mainstream">מיינסטרים / Mainstream</option>
-        <option value="festival">פסטיבל / Festival</option>
-        <option value="cinema">קולנוע / Cinema</option>
+        <option value="fringe">הופעות שוליים</option>
+        <option value="bohemia">בוהמיה</option>
+        <option value="festival">פסטיבלים</option>
+        <option value="cinema">קולנועים</option>
+        <option value="bars">ברים</option>
+        <option value="restaurants">מסעדות</option>
+        <option value="club">מועדונים</option>
+        <option value="secret">סודי</option>
+        <option value="other" selected>אחר</option>
       </select>
     </div>
     <div class="field"><label>Admin password</label><input id="fPass" type="password" /></div>
@@ -137,7 +141,7 @@
         if (!Array.isArray(rows)) throw new Error("sources table missing — run schema2-sources.sql");
         el.classList.remove("state");
         el.innerHTML = "";
-        const CATS = [["fringe","אירועי שוליים"],["club","מועדון"],["mainstream","מיינסטרים"],["festival","פסטיבל"],["cinema","קולנוע"]];
+        const CATS = [["fringe","הופעות שוליים"],["bohemia","בוהמיה"],["festival","פסטיבלים"],["cinema","קולנועים"],["bars","ברים"],["restaurants","מסעדות"],["club","מועדונים"],["secret","סודי"],["other","אחר"]];
         for (const s of rows) {
           const div = document.createElement("div");
           div.className = "src-row";
