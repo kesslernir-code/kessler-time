@@ -29,7 +29,7 @@
   <div class="panel">
     <h2>Add a site to follow</h2>
     <div class="field"><label>Site name (e.g. "Levontin 7")</label><input id="fName" /></div>
-    <div class="field"><label>Events page URL (the page that lists the events)</label><input id="fUrl" placeholder="https://..." /></div>
+    <div class="field"><label>Events page URL — a website, or an Instagram / Facebook page (events pulled from the link)</label><input id="fUrl" placeholder="https://…  |  instagram.com/baveltlv  |  facebook.com/PageName" /></div>
     <div class="field"><label>Venue display name (optional — shown on event cards)</label><input id="fVenue" /></div>
     <div class="field"><label>City (optional, in Hebrew — e.g. תל אביב)</label><input id="fCity" /></div>
     <div class="field"><label>Category</label>
@@ -105,7 +105,12 @@
       const name = $("#fName").value.trim(), url = $("#fUrl").value.trim(), pass = $("#fPass").value;
       const msg = $("#msg");
       if (!name || !url || !pass) { msg.textContent = "name, URL and password are required"; msg.style.color = "#ff7a7a"; return; }
-      const id = slugify(url);
+      // an Instagram/Facebook page URL → id from its handle (events pulled from the link)
+      const soc = detectSocial(url);
+      let id;
+      if (soc && (soc.platform === "instagram" || soc.platform === "facebook")) {
+        id = (soc.platform === "instagram" ? "ig-" : "fb-") + soc.handle.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 27);
+      } else { id = slugify(url); }
       if (!id) { msg.textContent = "that URL doesn't look valid"; msg.style.color = "#ff7a7a"; return; }
       $("#addBtn").disabled = true;
       try {

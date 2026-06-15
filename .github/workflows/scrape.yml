@@ -24,7 +24,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: node scraper/index.js
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          # scrape social-page venues only on the daily run / manual scans (Apify cost)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then export SCRAPE_SOCIAL=1; fi
+          node scraper/index.js
       - name: Run social discovery
         # once daily (04:00 UTC) — ~$0.30/run, comfortably within the paid plan
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * *'

@@ -85,6 +85,17 @@ export function canonTitle(s = "") {
     .trim();
 }
 
+/** Detect an Instagram/Facebook PAGE url (for main-feed venues). FB groups are
+ *  excluded — those are under-radar discovery sources, not venues. */
+export function detectSocialUrl(u) {
+  const s = String(u || "");
+  let m;
+  if ((m = s.match(/instagram\.com\/([A-Za-z0-9_.]+)/))) return { platform: "instagram", handle: m[1] };
+  if (/facebook\.com\/groups\//.test(s)) return null;
+  if ((m = s.match(/facebook\.com\/([A-Za-z0-9.\-]+)/))) return { platform: "facebook", handle: m[1] };
+  return null;
+}
+
 /** Scan free text for a price: returns "₪50" / "₪50–70" / "חינם" / null. Generic, no per-site rules. */
 export function scanPrice(text = "") {
   const nums = [
