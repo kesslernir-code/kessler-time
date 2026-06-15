@@ -15,7 +15,7 @@
     .btn { background: var(--accent); color: #14130c; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 700; cursor: pointer; }
     .btn:disabled { opacity: .5; }
     #msg { margin-top: 10px; font-size: 14px; min-height: 20px; }
-    .src-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #242837; font-size: 14px; }
+    .src-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid #242837; font-size: 14px; }
     .src-row:last-child { border: none; }
     .src-row .grow { flex: 1; }
     .src-row a { color: var(--accent-2); text-decoration: none; }
@@ -31,7 +31,7 @@
     <div class="field"><label>Site name (e.g. "Levontin 7")</label><input id="fName" /></div>
     <div class="field"><label>Events page URL (the page that lists the events)</label><input id="fUrl" placeholder="https://..." /></div>
     <div class="field"><label>Venue display name (optional — shown on event cards)</label><input id="fVenue" /></div>
-    <div class="field"><label>City (optional, in English)</label><input id="fCity" /></div>
+    <div class="field"><label>City (optional, in Hebrew — e.g. תל אביב)</label><input id="fCity" /></div>
     <div class="field"><label>Category</label>
       <select id="fCat" style="background:var(--panel-2);border:1px solid #2c3040;color:var(--text);border-radius:8px;padding:9px 12px;font:inherit">
         <option value="fringe">אירועי שוליים / Fringe</option>
@@ -137,18 +137,31 @@
         if (!Array.isArray(rows)) throw new Error("sources table missing — run schema2-sources.sql");
         el.classList.remove("state");
         el.innerHTML = "";
+        const CATS = [["fringe","אירועי שוליים"],["club","מועדון"],["mainstream","מיינסטרים"],["festival","פסטיבל"],["cinema","קולנוע"]];
         for (const s of rows) {
           const div = document.createElement("div");
           div.className = "src-row";
-          div.innerHTML = `<span class="grow"><b>${s.name}</b> <a href="${s.url}" target="_blank" rel="noopener">↗</a></span>
-            <span class="pill">${s.category || "fringe"}</span>
-            <span class="pill">${s.strategy}</span>
-            <span class="pill" style="color:${s.enabled ? "var(--free)" : "#ff7a7a"}">${s.enabled ? "on" : "off"}</span>
-            <button class="mini">${s.enabled ? "disable" : "enable"}</button>`;
-          div.querySelector(".mini").onclick = async () => {
+          const inStyle = "background:var(--panel-2);border:1px solid #2c3040;color:var(--text);border-radius:6px;padding:5px 8px;font:inherit;font-size:13px";
+          const name = document.createElement("input"); name.value = s.name; name.style.cssText = inStyle + ";flex:1;min-width:120px";
+          const cat = document.createElement("select"); cat.style.cssText = inStyle;
+          CATS.forEach(([v,l]) => { const o=document.createElement("option"); o.value=v; o.textContent=l; if((s.category||"fringe")===v)o.selected=true; cat.appendChild(o); });
+          const city = document.createElement("input"); city.value = s.city || ""; city.placeholder = "עיר"; city.style.cssText = inStyle + ";width:80px";
+          const link = document.createElement("a"); link.href = s.url; link.target = "_blank"; link.rel = "noopener"; link.textContent = "↗";
+          const save = document.createElement("button"); save.className = "mini"; save.textContent = "שמור";
+          const toggle = document.createElement("button"); toggle.className = "mini"; toggle.textContent = s.enabled ? "כבה" : "הפעל";
+          toggle.style.color = s.enabled ? "var(--free)" : "#ff7a7a";
+          save.onclick = async () => {
+            save.disabled = true; save.textContent = "…";
+            const out = await rpc("update_source", { secret: $("#fPass").value, p_id: s.id, p_name: name.value.trim(), p_category: cat.value, p_city: city.value.trim() });
+            save.textContent = out === "ok" ? "✓" : "שגיאה";
+            if (out !== "ok") alert(typeof out === "string" ? out : JSON.stringify(out));
+            setTimeout(() => { save.disabled = false; save.textContent = "שמור"; }, 1500);
+          };
+          toggle.onclick = async () => {
             const out = await rpc("set_source_enabled", { secret: $("#fPass").value, p_id: s.id, p_enabled: !s.enabled });
             if (out === "ok") loadSources(); else alert(typeof out === "string" ? out : "failed");
           };
+          [name, cat, city, link, save, toggle].forEach((e) => div.appendChild(e));
           el.appendChild(div);
         }
       } catch (e) { el.textContent = e.message; }

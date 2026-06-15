@@ -52,9 +52,18 @@ const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run") || !dbConfigured();
 const only = args.find((a) => a.startsWith("--source="))?.split("=")[1];
 
-// Title-case English city names so "tel aviv" / "Tel aviv" → "Tel Aviv" (Hebrew untouched)
-const normCity = (c) =>
-  c == null ? null : String(c).replace(/[A-Za-z]+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+// Cities are displayed in Hebrew. Map common English names to Hebrew; pass
+// already-Hebrew (or unknown) values through unchanged.
+const CITY_HE = {
+  "tel aviv": "תל אביב", "tel aviv-yafo": "תל אביב", "tel-aviv": "תל אביב", "telaviv": "תל אביב",
+  jaffa: "יפו", "tel aviv jaffa": "תל אביב", jerusalem: "ירושלים", haifa: "חיפה",
+  "beer sheva": "באר שבע", "be'er sheva": "באר שבע", "ramat gan": "רמת גן", herzliya: "הרצליה",
+};
+const normCity = (c) => {
+  if (c == null) return null;
+  const t = String(c).trim();
+  return CITY_HE[t.toLowerCase()] || t;
+};
 
 const ilDay = (iso) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(iso));
