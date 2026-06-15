@@ -8,6 +8,7 @@
 </head>
 <body>
   <header class="top"><h1 class="logo">Scrape<span>Status</span></h1><a class="lang-btn" href="index.html">← events</a></header>
+  <div id="health"></div>
   <div id="out" class="state">loading…</div>
   <script src="config.js"></script>
   <script>
@@ -15,6 +16,16 @@
       const C = window.KESSLER_CONFIG, out = document.getElementById("out");
       if (!C.SUPABASE_URL) { out.textContent = "config.js not filled in"; return; }
       try {
+        // latest QA health-check banner
+        const hres = await fetch(`${C.SUPABASE_URL}/rest/v1/scrape_runs?source_id=eq.health-check&select=*&order=started_at.desc&limit=1`,
+          { headers: { apikey: C.SUPABASE_ANON_KEY } });
+        const h = (await hres.json())[0];
+        if (h) document.getElementById("health").innerHTML =
+          `<div style="margin:16px 0;padding:14px 16px;border-radius:12px;border:1px solid #2c3040;background:var(--panel);font-size:15px">
+            <b style="color:${h.ok ? "var(--free)" : "var(--accent)"}">${h.ok ? "✓ הכל תקין" : "⚠ יש מה לבדוק"}</b>
+            &nbsp; ${h.error || ""}
+            <span style="color:var(--muted)"> · ${new Date(h.started_at).toLocaleString("en-GB", { timeZone: "Asia/Jerusalem" })}</span>
+          </div>`;
         const res = await fetch(`${C.SUPABASE_URL}/rest/v1/scrape_runs?select=*&order=started_at.desc&limit=60`,
           { headers: { apikey: C.SUPABASE_ANON_KEY } });
         const runs = await res.json();

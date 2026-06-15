@@ -94,6 +94,15 @@ export async function deleteSourceEvents(id) {
   await rest(`events?source_id=eq.${id}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
 }
 
+/** All upcoming events with the fields the QA checker needs. */
+export async function upcomingEvents() {
+  if (!dbConfigured()) return [];
+  const now = encodeURIComponent(new Date(Date.now() - 3 * 3600e3).toISOString());
+  return rest(
+    `events?starts_at=gte.${now}&select=id,source_id,kind,title,starts_at,image_url,description,booking_url,event_url,price_text,is_free,venue,city&order=starts_at.asc&limit=2000`
+  );
+}
+
 export async function logRun(run) {
   if (!dbConfigured()) return;
   await rest("scrape_runs", {
