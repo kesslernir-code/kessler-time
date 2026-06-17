@@ -1,17 +1,20 @@
-// Decisive test: does a cinema /event/ page yield og:image via the scraper's
-// normal fetch (fetchOgImage)? If yes, the fix is trivial: capture /event/ URLs
-// and the existing escalation fills posters — no per-page render needed.
-import { fetchOgImage, fetchPage } from "./lib/fetchPage.js";
+// Verify the cinema strategy: parse the schedule + confirm og:image per film.
+import * as cinema from "./strategies/cinema.js";
+import { fetchOgImage } from "./lib/fetchPage.js";
 
-const urls = [
-  "https://www.cinema.co.il/event/%d7%97%d7%99%d7%99%d7%9d-%d7%9c%d7%9c%d7%90-%d7%9b%d7%99%d7%a1%d7%95%d7%99-%d7%99%d7%95%d7%9d-%d7%94%d7%a7%d7%95%d7%9c%d7%a0%d7%95%d7%a2-%d7%94%d7%99%d7%a9%d7%a8%d7%90%d7%9c%d7%99/",
-  "https://www.cinema.co.il/event/%d7%9e%d7%90%d7%9e%d7%90-%d7%99%d7%95%d7%9d-%d7%94%d7%a7%d7%95%d7%9c%d7%a0%d7%95%d7%a2-%d7%94%d7%99%d7%a9%d7%a8%d7%90%d7%9c%d7%99/",
-];
-for (const u of urls) {
-  let status = "?";
-  try { status = (await fetchPage(u, { retries: 0, timeoutMs: 15000 })).status; } catch (e) { status = "ERR " + e.message; }
-  const og = await fetchOgImage(u);
-  console.log(`\nstatus=${status}`);
-  console.log(`og:image = ${og || "(none)"}`);
+const source = { id: "cinema", name: "סינמטק", url: "https://www.cinema.co.il/", venue: "סינמטק", city: "תל אביב" };
+const events = await cinema.scrape(source);
+console.log(`\nPARSED ${events.length} screenings`);
+
+// Spot-check og:image on the first 5 distinct film pages.
+const seen = new Set(); let checked = 0, withImg = 0;
+for (const e of events) {
+  if (seen.has(e.eventUrl) || checked >= 5) continue;
+  seen.add(e.eventUrl); checked++;
+  const og = await fetchOgImage(e.eventUrl);
+  if (og) withImg++;
+  console.log(`\n- ${e.title}  @ ${e.startsAt}`);
+  console.log(`  event: ${e.eventUrl.slice(0, 70)}`);
+  console.log(`  og:image → ${og ? og.slice(0, 70) : "(none)"}`);
 }
-console.log("\n=== DONE ===");
+console.log(`\n=== ${events.length} screenings; og:image OK on ${withImg}/${checked} sampled films ===`);

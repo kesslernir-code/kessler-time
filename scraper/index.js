@@ -42,6 +42,7 @@ import * as jaffaCinema from "./strategies/jaffaCinema.js";
 import * as wpAuto from "./strategies/wpAuto.js";
 import * as socialVenue from "./strategies/socialVenue.js";
 import * as amphitlv from "./strategies/amphitlv.js";
+import * as cinema from "./strategies/cinema.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -53,6 +54,7 @@ const strategies = {
   [jaffaCinema.name]: jaffaCinema,
   [wpAuto.name]: wpAuto,
   [amphitlv.name]: amphitlv,
+  [cinema.name]: cinema,
 };
 
 const args = process.argv.slice(2);
