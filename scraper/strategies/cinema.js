@@ -17,9 +17,16 @@ import { israelISO, decodeEntities, shortHash } from "../lib/util.js";
 export const name = "cinema";
 
 export async function scrape(source, log = console.error) {
-  let html;
+  // The daily-schedule widget (with the <h6> date headers we need) loads via a
+  // late XHR and is sometimes absent from a single render. Retry until it shows.
+  let html = "";
   try {
-    ({ html } = await renderPage(source.url, { timeoutMs: 50000, scroll: true }));
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const r = await renderPage(source.url, { timeoutMs: 50000, settleMs: 2500, scroll: true });
+      html = r.html || "";
+      if (/<h6[^>]*>\s*\d{2}\.\d{2}\.\d{2}/.test(html)) break;
+      log(`  [${source.id}] cinema: schedule not in render (attempt ${attempt}), retrying…`);
+    }
   } finally {
     await closeBrowser();
   }
