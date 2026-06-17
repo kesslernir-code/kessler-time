@@ -43,6 +43,7 @@ import * as wpAuto from "./strategies/wpAuto.js";
 import * as socialVenue from "./strategies/socialVenue.js";
 import * as amphitlv from "./strategies/amphitlv.js";
 import * as cinema from "./strategies/cinema.js";
+import * as epgb from "./strategies/epgb.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -55,6 +56,7 @@ const strategies = {
   [wpAuto.name]: wpAuto,
   [amphitlv.name]: amphitlv,
   [cinema.name]: cinema,
+  [epgb.name]: epgb,
 };
 
 const args = process.argv.slice(2);
