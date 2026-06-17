@@ -1,12 +1,12 @@
--- schema11: disable sources that have no website URL (Facebook/Instagram-only venues
--- that we can no longer scrape). Run once in the Supabase SQL Editor.
--- Review the list with the SELECT first, then run the UPDATE.
+-- schema11: disable sources whose URL is a Facebook or Instagram page
+-- (we can no longer scrape these — Graph API needs App Review, mbasic is blocked).
+-- Run once in the Supabase SQL Editor.
 
 -- Preview which sources will be disabled:
--- SELECT id, name, url, platform FROM sources WHERE (url IS NULL OR url = '') AND enabled = true;
+-- SELECT id, name, url FROM sources WHERE url ~* 'facebook\.com|instagram\.com' AND enabled = true;
 
 -- Disable them:
 update sources
 set enabled = false
-where (url is null or url = '')
+where url ~* 'facebook\.com|instagram\.com'
   and enabled = true;
