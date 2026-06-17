@@ -94,6 +94,19 @@ export async function deleteSourceEvents(id) {
   await rest(`events?source_id=eq.${id}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
 }
 
+/** Remove a source's UPCOMING events that the latest scrape no longer produced
+ *  (e.g. de-duplicated title variants, dropped listings). Only called after a
+ *  successful scrape that returned events, so a failed run never prunes. */
+export async function pruneSourceEvents(sourceId, keepIds) {
+  if (!dbConfigured() || !keepIds.length) return;
+  const now = encodeURIComponent(new Date(Date.now() - 3 * 3600e3).toISOString());
+  const keep = keepIds.map((id) => `"${id}"`).join(",");
+  await rest(`events?source_id=eq.${sourceId}&starts_at=gte.${now}&id=not.in.(${keep})`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
 /** All upcoming events with the fields the QA checker needs. */
 export async function upcomingEvents() {
   if (!dbConfigured()) return [];

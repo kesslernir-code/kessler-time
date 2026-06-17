@@ -85,6 +85,19 @@ export function canonTitle(s = "") {
     .trim();
 }
 
+/** Two titles describe the same event when their word-sets overlap heavily —
+ *  e.g. "FOREVER YOUNG" vs "FOREVER YOUNG - 80s Party", or a tour announced under
+ *  slightly different phrasings. Measured as overlap / smaller-set (so a short
+ *  title fully contained in a longer one counts as a match). */
+export function titlesSimilar(a, b, threshold = 0.6) {
+  const toks = (s) => new Set(canonTitle(s).split(" ").filter((w) => w.length > 1));
+  const A = toks(a), B = toks(b);
+  if (!A.size || !B.size) return false;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter++;
+  return inter / Math.min(A.size, B.size) >= threshold;
+}
+
 /** Detect an Instagram/Facebook PAGE url (for main-feed venues). FB groups are
  *  excluded — those are under-radar discovery sources, not venues. */
 export function detectSocialUrl(u) {

@@ -2,8 +2,8 @@
 // Usage: node scraper/index.js [--dry-run] [--source=<id>]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
-import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents } from "./lib/db.js";
+import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl, titlesSimilar } from "./lib/util.js";
+import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneSourceEvents } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
 import { fetchOgImage, fetchPageInfo } from "./lib/fetchPage.js";
@@ -120,7 +120,21 @@ function normalize(raw, source) {
     const existing = byId.get(row.id);
     if (!existing || completeness(row) > completeness(existing)) byId.set(row.id, row);
   }
-  return [...byId.values()];
+
+  // Second pass: collapse the same event scraped under slightly different titles.
+  // Two rows merge only when they start at the EXACT same time AND their titles
+  // overlap heavily — so distinct films at different times (cinema) are kept, but
+  // "FOREVER YOUNG" / "FOREVER YOUNG - 80s Party" style duplicates fold into one
+  // (the most complete wins, so an imaged copy beats a placeholder one).
+  const byTime = new Map(); // starts_at -> kept rows
+  for (const row of byId.values()) {
+    const arr = byTime.get(row.starts_at) || [];
+    const dup = arr.find((r) => titlesSimilar(r.title, row.title));
+    if (!dup) arr.push(row);
+    else if (completeness(row) > completeness(dup)) arr[arr.indexOf(dup)] = row;
+    byTime.set(row.starts_at, arr);
+  }
+  return [...byTime.values()].flat();
 }
 
 if (DRY) console.error(dbConfigured() ? "-- DRY RUN --" : "-- DRY RUN (no SUPABASE_URL configured) --");
@@ -181,6 +195,9 @@ for (const source of sources) {
       if (events.length > 8) console.log(`  ... +${events.length - 8} more`);
     } else {
       await upsertEvents(events);
+      // Remove stale upcoming rows this run no longer produces (old duplicates,
+      // dropped listings). Guarded inside pruneSourceEvents to never run on [].
+      await pruneSourceEvents(source.id, events.map((e) => e.id));
       console.log(`${source.id}: ${events.length} events upserted (${raw.length} found) via ${source.strategy}`);
     }
     run.ok = true;
