@@ -160,7 +160,32 @@
       $("#addBtn").disabled = false;
     };
 
-    $("#scrapeBtn").onclick = () => window.open(ACTIONS_URL, "_blank", "noopener");
+    $("#scrapeBtn").onclick = async () => {
+      const pw = $("#fPass").value.trim();
+      if (!pw) { alert("Enter admin password first"); return; }
+      $("#scrapeBtn").disabled = true;
+      $("#scrapeBtn").textContent = "⏳ Starting…";
+      try {
+        const r = await fetch("/.netlify/functions/trigger-scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secret: pw }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          $("#scrapeBtn").textContent = "✓ Started!";
+          setTimeout(() => { $("#scrapeBtn").textContent = "↻ Scan now"; $("#scrapeBtn").disabled = false; }, 4000);
+        } else {
+          alert("Error: " + (d.error || "unknown"));
+          $("#scrapeBtn").textContent = "↻ Scan now";
+          $("#scrapeBtn").disabled = false;
+        }
+      } catch (e) {
+        alert(e.message);
+        $("#scrapeBtn").textContent = "↻ Scan now";
+        $("#scrapeBtn").disabled = false;
+      }
+    };
 
     async function loadSources() {
       const el = $("#srcList");
