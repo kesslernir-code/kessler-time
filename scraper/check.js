@@ -16,7 +16,7 @@ let fixed = 0, tried = 0;
 for (const e of events) {
   if (e.image_url || !e.event_url) continue;
   if (/facebook\.com|instagram\.com/.test(e.event_url)) continue;
-  if (tried >= 40) break;
+  if (tried >= 80) break;
   tried++;
   const img = await fetchOgImage(e.event_url);
   if (img) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixed++; }
