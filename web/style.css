@@ -67,6 +67,10 @@ body {
 .chip.on { background: var(--accent); color: #14130c; border-color: var(--accent); font-weight: 600; }
 
 /* Non-default category chips — each has its own accent colour */
+.chip.cat-live            { border-color: #f87171; color: #f87171; }
+.chip.cat-live.on         { background: #f87171; color: #0e0f13; border-color: #f87171; }
+.chip.cat-exhibitions     { border-color: #2dd4bf; color: #2dd4bf; }
+.chip.cat-exhibitions.on  { background: #2dd4bf; color: #0e0f13; border-color: #2dd4bf; }
 .chip.cat-festival        { border-color: #a78bfa; color: #a78bfa; }
 .chip.cat-festival.on     { background: #a78bfa; color: #0e0f13; border-color: #a78bfa; }
 .chip.cat-cinema          { border-color: #60a5fa; color: #60a5fa; }

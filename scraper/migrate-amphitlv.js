@@ -11,6 +11,7 @@ if (!ampi) {
   await updateSourceRow(ampi.id, {
     url: "https://amphitlv.co.il/",
     strategy: "amphitlv",
+    category: "live", // Amphi Tel Aviv = live shows / concerts
   });
   // Drop old imageless events so the next scrape repopulates them with posters.
   await deleteSourceEvents(ampi.id);

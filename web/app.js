@@ -24,7 +24,9 @@
       addPlace: "+ הוספת מקום",
       social: "🔦 מתחת לרדאר",
       cat_fringe: "הופעות שוליים",
+      cat_live: "הופעות חיות",
       cat_bohemia: "בוהמיה",
+      cat_exhibitions: "תערוכות",
       cat_festival: "פסטיבלים",
       cat_cinema: "קולנועים",
       cat_bars: "ברים",
@@ -53,7 +55,9 @@
       addPlace: "+ Add place",
       social: "🔦 Under the radar",
       cat_fringe: "Fringe",
+      cat_live: "Live shows",
       cat_bohemia: "Bohemia",
+      cat_exhibitions: "Exhibitions",
       cat_festival: "Festivals",
       cat_cinema: "Cinemas",
       cat_bars: "Bars",
@@ -80,13 +84,15 @@
   // Each filter is a Set — empty Set means "all". Several chips can be active at once.
   const srcSel = new Set();
   const citySel = new Set();
-  const DEFAULT_CATS = ["fringe", "bohemia", "secret", "other"];
-  const catSel = new Set(DEFAULT_CATS);
+  // Category is single-select: exactly one is always chosen (no "all" mode).
+  // The default landing category is הופעות שוליים (fringe).
+  const DEFAULT_CAT = "fringe";
+  const catSel = new Set([DEFAULT_CAT]);
   const daySel = new Set(); // any of: today / tomorrow / weekend
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
-  const CATEGORIES = ["fringe", "bohemia", "festival", "cinema", "bars", "restaurants", "club", "secret", "other"];
+  const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
   // shown as info-card listings, not event feeds
   const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
 
@@ -355,17 +361,13 @@
     const wrap = $("#catChips");
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
-    const isDefault = catSel.size === DEFAULT_CATS.length && DEFAULT_CATS.every(c => catSel.has(c));
-    addChip(wrap, t("all"), isDefault, () => {
-      catSel.clear(); DEFAULT_CATS.forEach(c => catSel.add(c));
-      srcSel.clear(); renderCatChips(); renderChips(); render();
-    });
-    const CAT_COLOR = { festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
+    // Single-select: no "all" chip. Clicking a category makes it the only one.
+    const CAT_COLOR = { live: "cat-live", exhibitions: "cat-exhibitions", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
-        toggle(catSel, c);
-        // drop any selected places no longer in the chosen categories
-        for (const id of [...srcSel]) if (!catSel.has(SOURCES[id]?.category)) srcSel.delete(id);
+        if (catSel.has(c)) return; // already the active category
+        catSel.clear(); catSel.add(c);
+        srcSel.clear(); // place chips belong to the previous category
         renderCatChips(); renderChips(); render();
       }, CAT_COLOR[c] || null);
     }
