@@ -1,33 +1,39 @@
-// Diagnose artport.art image state: what does the source produce, and are the
-// stored image URLs actually loadable (not 403/hotlink-blocked)?
+// Probe image availability per event page for problem sources.
+// For each event: does its event_url yield a poster via og:image / first <img>,
+// and (for already-stored images) does the stored URL actually load?
 import { getSources } from "./lib/db.js";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+const BAD = /logo|placeholder|sprite|favicon|blank/i;
 
-// 1. Show the artport source row
-const sources = (await getSources()) || [];
-const art = sources.find((s) => /artport/i.test(s.id) || /artport\.art/i.test(s.url || ""));
-console.log("ARTPORT SOURCE:", JSON.stringify(art, null, 1));
+async function pageImage(url) {
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000), redirect: "follow" });
+    if (!r.ok) return `HTTP ${r.status}`;
+    const html = await r.text();
+    const og = html.match(/<meta[^>]+property=["']og:image[^>]*content=["']([^"']+)/i)?.[1]
+      || html.match(/content=["']([^"']+)["'][^>]+property=["']og:image/i)?.[1];
+    if (og && !BAD.test(og)) return "og:" + og.slice(0, 70);
+    const tw = html.match(/<meta[^>]+name=["']twitter:image[^>]*content=["']([^"']+)/i)?.[1];
+    if (tw && !BAD.test(tw)) return "tw:" + tw.slice(0, 70);
+    for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) {
+      if (m[1].startsWith("http") && !BAD.test(m[1]) && !/icon|avatar|pixel/i.test(m[1])) return "img:" + m[1].slice(0, 70);
+    }
+    return "(no image on page)";
+  } catch (e) { return "ERR " + e.message; }
+}
 
-// 2. Pull its events from the DB and test each image_url
 const url = process.env.SUPABASE_URL.replace(/\/$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const evs = await (await fetch(`${url}/rest/v1/events?source_id=eq.${art.id}&select=title,image_url,event_url,starts_at&order=starts_at.asc`, {
-  headers: { apikey: key, Authorization: `Bearer ${key}` },
-})).json();
-console.log(`\n${evs.length} events in DB for ${art.id}`);
 
-for (const e of evs) {
-  let imgStatus = "(no image_url)";
-  if (e.image_url) {
-    try {
-      const r = await fetch(e.image_url, { method: "GET", headers: { "User-Agent": UA, Referer: "https://www.artport.art/" }, signal: AbortSignal.timeout(12000) });
-      const ct = r.headers.get("content-type") || "";
-      imgStatus = `HTTP ${r.status} ${ct}`;
-    } catch (err) { imgStatus = "ERR " + err.message; }
+for (const sid of ["cinema", "fb-artportlv", "epgb", "gagarin"]) {
+  const evs = await (await fetch(`${url}/rest/v1/events?source_id=eq.${sid}&image_url=is.null&select=title,event_url&order=starts_at.asc&limit=4`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })).json();
+  console.log(`\n===== ${sid}: ${evs.length} imageless sampled =====`);
+  for (const e of evs) {
+    console.log(`- ${e.title?.slice(0, 40)}`);
+    console.log(`  url: ${e.event_url}`);
+    console.log(`  → ${await pageImage(e.event_url)}`);
   }
-  console.log(`\n- ${e.title?.slice(0, 45)}`);
-  console.log(`  img: ${e.image_url || "(none)"}`);
-  console.log(`  load: ${imgStatus}`);
-  console.log(`  event_url: ${e.event_url}`);
 }
 console.log("\n=== DONE ===");
