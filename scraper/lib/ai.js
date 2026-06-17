@@ -149,11 +149,11 @@ ${list}`;
  */
 export async function extractEventsFromPage({ sourceName, url, text }, todayISO) {
   const prompt = `Today is ${todayISO} (Israel). The text below is from the events page of "${sourceName}" (${url}).
-Extract every distinct upcoming event that has a real, parseable date. Return ONLY a JSON array:
+Extract the next 30 distinct upcoming events that has a real, parseable date. Return ONLY a JSON array:
 [{"title": "...", "description": "..." (short, optional), "date": "YYYY-MM-DD", "time": "HH:MM" or null, "price_text": "..." or null, "is_free": true/false/null, "event_url": "..." or null, "image_url": "..." or null, "confidence": 0.0-1.0}]
 If a year is missing assume the next future occurrence. Do not invent events or dates.
 
 PAGE TEXT:
-${text.slice(0, 28000)}`;
+${text.slice(0, 15000)}`;
   return parseJsonArray(await ask(prompt, 8000));
 }
