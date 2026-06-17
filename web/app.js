@@ -80,7 +80,8 @@
   // Each filter is a Set — empty Set means "all". Several chips can be active at once.
   const srcSel = new Set();
   const citySel = new Set();
-  const catSel = new Set();
+  const DEFAULT_CATS = ["fringe", "bohemia", "secret", "other"];
+  const catSel = new Set(DEFAULT_CATS);
   const daySel = new Set(); // any of: today / tomorrow / weekend
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
@@ -354,8 +355,10 @@
     const wrap = $("#catChips");
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
-    addChip(wrap, t("all"), !catSel.size, () => {
-      catSel.clear(); srcSel.clear(); renderCatChips(); renderChips(); render();
+    const isDefault = catSel.size === DEFAULT_CATS.length && DEFAULT_CATS.every(c => catSel.has(c));
+    addChip(wrap, t("all"), isDefault, () => {
+      catSel.clear(); DEFAULT_CATS.forEach(c => catSel.add(c));
+      srcSel.clear(); renderCatChips(); renderChips(); render();
     });
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
