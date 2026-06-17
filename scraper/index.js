@@ -96,7 +96,13 @@ const completeness = (e) =>
  */
 // Strip control characters (incl. NUL bytes that PostgreSQL rejects, seen in
 // some scraped HTML) so the upsert body is always valid for the DB.
-const clean = (s) => (typeof s === "string" ? s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim() : s);
+const clean = (s) =>
+  typeof s === "string"
+    ? s
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "") // C0 controls + DEL
+        .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "") // lone surrogates PG rejects
+        .trim()
+    : s;
 
 function normalize(raw, source) {
   const byId = new Map();
