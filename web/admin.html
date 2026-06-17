@@ -56,6 +56,44 @@
     </p>
   </div>
 
+  <div class="panel" id="uploadPanel">
+    <h2>📸 Add event from screenshot</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Take a screenshot of a Facebook/Instagram event and upload it — Claude will read the details automatically.</p>
+    <div class="field">
+      <label>Screenshot (JPG / PNG)</label>
+      <input type="file" id="imgFile" accept="image/*" style="color:var(--text);background:var(--panel-2);border:1px solid #2c3040;border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer" />
+    </div>
+    <img id="imgPreview" style="display:none;max-width:100%;border-radius:8px;margin-bottom:10px" />
+    <div id="extractedForm" style="display:none">
+      <div class="field"><label>Title</label><input id="evTitle" /></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:130px"><label>Date (YYYY-MM-DD)</label><input id="evDate" placeholder="2025-07-04" /></div>
+        <div class="field" style="flex:1;min-width:100px"><label>Time (HH:MM)</label><input id="evTime" placeholder="21:00" /></div>
+      </div>
+      <div class="field"><label>Venue / location</label><input id="evVenue" /></div>
+      <div class="field"><label>City (Hebrew)</label><input id="evCity" /></div>
+      <div class="field"><label>Description (optional)</label><input id="evDesc" /></div>
+      <div class="field"><label>Price (optional)</label><input id="evPrice" /></div>
+      <div class="field"><label>Ticket / booking URL (optional)</label><input id="evBooking" /></div>
+      <div class="field"><label>Category</label>
+        <select id="evCat" style="background:var(--panel-2);border:1px solid #2c3040;color:var(--text);border-radius:8px;padding:9px 12px;font:inherit">
+          <option value="fringe">הופעות שוליים</option>
+          <option value="bohemia">בוהמיה</option>
+          <option value="festival">פסטיבלים</option>
+          <option value="cinema">קולנועים</option>
+          <option value="bars">ברים</option>
+          <option value="restaurants">מסעדות</option>
+          <option value="club">מועדונים</option>
+          <option value="secret">סודי</option>
+          <option value="other" selected>אחר</option>
+        </select>
+      </div>
+      <button class="btn" id="saveEventBtn">Save event</button>
+    </div>
+    <button class="btn" id="extractBtn" style="display:none">🔍 Extract details</button>
+    <div id="uploadMsg" style="margin-top:10px;font-size:14px;min-height:20px"></div>
+  </div>
+
   <div class="panel">
     <h2>Current sources</h2>
     <div id="srcList" class="state">loading…</div>
@@ -162,6 +200,100 @@
       } catch (e) { el.textContent = e.message; }
     }
     loadSources();
+
+    // ---- Screenshot upload ------------------------------------------------
+    let uploadedImageData = null;
+
+    $("#imgFile").onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        uploadedImageData = ev.target.result; // base64 data URL
+        const preview = $("#imgPreview");
+        preview.src = uploadedImageData;
+        preview.style.display = "block";
+        $("#extractBtn").style.display = "inline-block";
+        $("#extractedForm").style.display = "none";
+        $("#uploadMsg").textContent = "";
+      };
+      reader.readAsDataURL(file);
+    };
+
+    $("#extractBtn").onclick = async () => {
+      const msg = $("#uploadMsg");
+      const pass = $("#fPass").value;
+      if (!pass) { msg.textContent = "enter admin password first"; msg.style.color = "#ff7a7a"; return; }
+      if (!uploadedImageData) return;
+      $("#extractBtn").disabled = true;
+      $("#extractBtn").textContent = "⏳ Reading…";
+      msg.textContent = "";
+      try {
+        const res = await fetch("/.netlify/functions/extract-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secret: pass, imageData: uploadedImageData }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "extraction failed");
+        const f = data.fields;
+        if (!f.title) { msg.textContent = "no event found in image"; msg.style.color = "#ff7a7a"; return; }
+        // pre-fill form
+        $("#evTitle").value = f.title || "";
+        $("#evDate").value = f.date || "";
+        $("#evTime").value = f.time || "";
+        $("#evVenue").value = f.venue || "";
+        $("#evCity").value = f.city || "";
+        $("#evDesc").value = f.description || "";
+        $("#evPrice").value = f.price_text || "";
+        $("#evBooking").value = f.booking_url || "";
+        $("#extractedForm").style.display = "block";
+        msg.textContent = "✓ Details extracted — review and save";
+        msg.style.color = "var(--free)";
+      } catch (e) {
+        msg.textContent = e.message; msg.style.color = "#ff7a7a";
+      } finally {
+        $("#extractBtn").disabled = false;
+        $("#extractBtn").textContent = "🔍 Extract details";
+      }
+    };
+
+    $("#saveEventBtn").onclick = async () => {
+      const msg = $("#uploadMsg");
+      const pass = $("#fPass").value;
+      const title = $("#evTitle").value.trim();
+      const date = $("#evDate").value.trim();
+      const time = $("#evTime").value.trim() || "20:00";
+      if (!title || !date) { msg.textContent = "title and date are required"; msg.style.color = "#ff7a7a"; return; }
+      const startsAt = `${date}T${time}:00+03:00`;
+      $("#saveEventBtn").disabled = true;
+      try {
+        const out = await rpc("add_manual_event", {
+          secret: pass,
+          p_title: title,
+          p_starts_at: startsAt,
+          p_category: $("#evCat").value,
+          p_venue: $("#evVenue").value.trim(),
+          p_city: $("#evCity").value.trim(),
+          p_description: $("#evDesc").value.trim(),
+          p_price_text: $("#evPrice").value.trim(),
+          p_booking_url: $("#evBooking").value.trim(),
+        });
+        if (out === "ok") {
+          msg.textContent = `✓ "${title}" saved — visible on the main page now`;
+          msg.style.color = "var(--free)";
+          $("#extractedForm").style.display = "none";
+          $("#imgPreview").style.display = "none";
+          $("#imgFile").value = "";
+          uploadedImageData = null;
+          $("#extractBtn").style.display = "none";
+        } else {
+          msg.textContent = typeof out === "string" ? out : JSON.stringify(out);
+          msg.style.color = "#ff7a7a";
+        }
+      } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
+      $("#saveEventBtn").disabled = false;
+    };
   </script>
 </body>
 </html>

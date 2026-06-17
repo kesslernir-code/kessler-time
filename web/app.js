@@ -327,9 +327,9 @@
 
   // Small helper: a chip whose "on" state reflects set membership (or "all"
   // highlighted when the set is empty). Multi-select — clicking toggles.
-  function addChip(wrap, label, on, onClick) {
+  function addChip(wrap, label, on, onClick, extraClass) {
     const b = document.createElement("button");
-    b.className = "chip" + (on ? " on" : "");
+    b.className = "chip" + (on ? " on" : "") + (extraClass ? " " + extraClass : "");
     b.textContent = label;
     b.onclick = onClick;
     wrap.appendChild(b);
@@ -360,13 +360,14 @@
       catSel.clear(); DEFAULT_CATS.forEach(c => catSel.add(c));
       srcSel.clear(); renderCatChips(); renderChips(); render();
     });
+    const CAT_COLOR = { festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
         toggle(catSel, c);
         // drop any selected places no longer in the chosen categories
         for (const id of [...srcSel]) if (!catSel.has(SOURCES[id]?.category)) srcSel.delete(id);
         renderCatChips(); renderChips(); render();
-      });
+      }, CAT_COLOR[c] || null);
     }
   }
 

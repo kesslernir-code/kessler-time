@@ -65,6 +65,18 @@ body {
   padding: 6px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px;
 }
 .chip.on { background: var(--accent); color: #14130c; border-color: var(--accent); font-weight: 600; }
+
+/* Non-default category chips — each has its own accent colour */
+.chip.cat-festival        { border-color: #a78bfa; color: #a78bfa; }
+.chip.cat-festival.on     { background: #a78bfa; color: #0e0f13; border-color: #a78bfa; }
+.chip.cat-cinema          { border-color: #60a5fa; color: #60a5fa; }
+.chip.cat-cinema.on       { background: #60a5fa; color: #0e0f13; border-color: #60a5fa; }
+.chip.cat-bars            { border-color: #fb923c; color: #fb923c; }
+.chip.cat-bars.on         { background: #fb923c; color: #0e0f13; border-color: #fb923c; }
+.chip.cat-restaurants     { border-color: #4ade80; color: #4ade80; }
+.chip.cat-restaurants.on  { background: #4ade80; color: #0e0f13; border-color: #4ade80; }
+.chip.cat-club            { border-color: #f472b6; color: #f472b6; }
+.chip.cat-club.on         { background: #f472b6; color: #0e0f13; border-color: #f472b6; }
 .date-hidden { position: absolute; width: 0; height: 0; opacity: 0; border: 0; padding: 0; pointer-events: none; color-scheme: dark; }
 #dateChips .chip { font-size: 13px; padding: 5px 12px; }
 .row2 { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
