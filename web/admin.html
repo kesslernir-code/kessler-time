@@ -50,9 +50,7 @@
     <button class="mini" id="scrapeBtn" style="margin-inline-start:8px">↻ Scan now</button>
     <div id="msg"></div>
     <p style="color:var(--muted);font-size:13px">
-      New sites use the automatic extraction ladder (structured data → AI). Events appear
-      after the next scheduled scan (3×/day), or trigger one now from
-      <a style="color:var(--accent-2)" href="https://github.com/kesslernir-code/kessler-time/actions/workflows/scrape.yml">GitHub Actions → Run workflow</a>.
+      New sites use the automatic extraction ladder (structured data → AI). Events appear after the next scheduled scan (3×/day), or click <strong style="color:var(--text)">↻ Scan now</strong> to run immediately.
     </p>
   </div>
 
@@ -104,7 +102,9 @@
     const C = window.KESSLER_CONFIG;
     const $ = (s) => document.querySelector(s);
     $("#fPass").value = localStorage.getItem("kt-admin") || "";
-    const ACTIONS_URL = "https://github.com/kesslernir-code/kessler-time/actions/workflows/scrape.yml";
+    $("#fPass").addEventListener("input", () => {
+      if ($("#fPass").value) localStorage.setItem("kt-admin", $("#fPass").value);
+    });
 
     const slugify = (url) => {
       try { return new URL(url).hostname.replace(/^www\./, "").split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30); }
@@ -161,8 +161,11 @@
     };
 
     $("#scrapeBtn").onclick = async () => {
-      const pw = $("#fPass").value.trim();
-      if (!pw) { alert("Enter admin password first"); return; }
+      let pw = $("#fPass").value.trim();
+      if (!pw) { pw = prompt("Admin password:") || ""; }
+      if (!pw) return;
+      localStorage.setItem("kt-admin", pw);
+      $("#fPass").value = pw;
       $("#scrapeBtn").disabled = true;
       $("#scrapeBtn").textContent = "⏳ Starting…";
       try {
