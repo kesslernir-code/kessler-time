@@ -156,7 +156,7 @@
           $("#fName").value = $("#fUrl").value = $("#fVenue").value = $("#fCity").value = "";
           loadSources();
           // kick off an immediate scrape so the new place fills in within ~2 min
-          msg.innerHTML = `✓ נוסף "${id}" — יופיע בסריקה הבאה (3×/יום), או הרץ עכשיו: <a style="color:var(--accent-2)" href="${ACTIONS_URL}" target="_blank">Run workflow ↗</a>`;
+          msg.innerHTML = `✓ נוסף "${id}" — יופיע בסריקה הבאה (3×/יום), או לחץ <strong>↻ Scan now</strong> כדי להריץ עכשיו.`;
           msg.style.color = "var(--free)";
         } else {
           msg.textContent = typeof out === "string" ? out : (out.message || JSON.stringify(out));
