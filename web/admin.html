@@ -57,15 +57,6 @@
   </div>
 
   <div class="panel">
-    <h2>🔦 מקורות ל"מתחת לרדאר"</h2>
-    <p style="color:var(--muted);font-size:13px;margin-top:0">הדבק קישור לקבוצת פייסבוק / דף אינסטגרם / ערוץ טלגרם / דף פייסבוק — המנוע שולף משם אירועים בודדים. צריך רק את הקישור.</p>
-    <div class="field"><input id="fRadar" placeholder="https://facebook.com/groups/…  |  instagram.com/…  |  t.me/…" /></div>
-    <button class="btn" id="radarBtn">הוסף מקור</button>
-    <div id="radarMsg" style="margin-top:10px;font-size:14px;min-height:20px"></div>
-    <div id="radarList" class="state" style="padding:14px 0">loading…</div>
-  </div>
-
-  <div class="panel">
     <h2>Current sources</h2>
     <div id="srcList" class="state">loading…</div>
   </div>
@@ -133,45 +124,6 @@
 
     $("#scrapeBtn").onclick = () => window.open(ACTIONS_URL, "_blank", "noopener");
 
-    // ---- under-radar discovery sources (link only) ----
-    const PLAT_HE = { telegram: "טלגרם", instagram: "אינסטגרם", facebook: "דף פייסבוק", "fb-group": "קבוצת פייסבוק", "fb-search": "חיפוש" };
-    $("#radarBtn").onclick = async () => {
-      const url = $("#fRadar").value.trim(), pass = $("#fPass").value, msg = $("#radarMsg");
-      if (!pass) { msg.textContent = "צריך סיסמת אדמין (בשדה למעלה)"; msg.style.color = "#ff7a7a"; return; }
-      const ref = detectSocial(url);
-      if (!ref) { msg.textContent = "קישור לא מזוהה — הדבק קישור לקבוצת פייסבוק / אינסטגרם / טלגרם"; msg.style.color = "#ff7a7a"; return; }
-      $("#radarBtn").disabled = true;
-      const out = await rpc("add_social_source", { secret: pass, p_platform: ref.platform, p_handle: ref.handle });
-      if (out === "ok") {
-        localStorage.setItem("kt-admin", pass);
-        msg.textContent = `✓ נוסף מקור (${PLAT_HE[ref.platform]}: ${ref.handle})`; msg.style.color = "var(--free)";
-        $("#fRadar").value = ""; loadRadar();
-      } else { msg.textContent = typeof out === "string" ? out : JSON.stringify(out); msg.style.color = "#ff7a7a"; }
-      $("#radarBtn").disabled = false;
-    };
-
-    async function loadRadar() {
-      const el = $("#radarList");
-      try {
-        const res = await fetch(`${C.SUPABASE_URL}/rest/v1/social_sources?select=*&order=added_at.asc`, { headers: { apikey: C.SUPABASE_ANON_KEY } });
-        const rows = await res.json();
-        if (!Array.isArray(rows)) { el.textContent = "run schema8-discovery-sources.sql"; return; }
-        el.classList.remove("state");
-        el.innerHTML = rows.length ? "" : "<span style='color:var(--muted)'>אין מקורות עדיין</span>";
-        for (const s of rows) {
-          const div = document.createElement("div"); div.className = "src-row";
-          div.innerHTML = `<span class="grow">${PLAT_HE[s.platform] || s.platform}: <b>${s.handle}</b></span>
-            <span class="pill" style="color:${s.enabled ? "var(--free)" : "#ff7a7a"}">${s.enabled ? "on" : "off"}</span>`;
-          const btn = document.createElement("button"); btn.className = "mini"; btn.textContent = s.enabled ? "כבה" : "הפעל";
-          btn.onclick = async () => {
-            const out = await rpc("set_social_enabled", { secret: $("#fPass").value, p_id: s.id, p_enabled: !s.enabled });
-            if (out === "ok") loadRadar(); else alert(typeof out === "string" ? out : "failed");
-          };
-          div.appendChild(btn); el.appendChild(div);
-        }
-      } catch (e) { el.textContent = e.message; }
-    }
-
     async function loadSources() {
       const el = $("#srcList");
       try {
@@ -210,7 +162,6 @@
       } catch (e) { el.textContent = e.message; }
     }
     loadSources();
-    loadRadar();
   </script>
 </body>
 </html>
