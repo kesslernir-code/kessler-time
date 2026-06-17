@@ -63,8 +63,20 @@ async function findEventTypes(base) {
   return out;
 }
 
+// Extract first <img> from post content that looks like an event poster
+function contentImage(html = "") {
+  for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+    const src = m[1];
+    if (!src.startsWith("http")) continue;
+    if (/logo|icon|avatar|sprite|pixel|spacer/i.test(src)) continue;
+    return src;
+  }
+  return null;
+}
+
 const imageOf = (it) =>
   it._embedded?.["wp:featuredmedia"]?.[0]?.source_url ||
+  contentImage(it.content?.rendered || "") ||
   it.yoast_head_json?.og_image?.[0]?.url ||
   null;
 
@@ -133,6 +145,19 @@ export async function scrape(source, log = console.error) {
       });
     });
     log(`  [${source.id}] wp-auto ai-date for ${needAi.length} undated posts`);
+  }
+
+  // Nullify site-wide banners: if one image URL appears on >50% of events,
+  // it's a generic poster (e.g. a festival banner used for every screening).
+  if (events.length >= 3) {
+    const freq = new Map();
+    for (const e of events) if (e.imageUrl) freq.set(e.imageUrl, (freq.get(e.imageUrl) || 0) + 1);
+    for (const [url, count] of freq) {
+      if (count / events.length > 0.5) {
+        log(`  [${source.id}] dedup: nullifying shared banner image (${count}/${events.length} events)`);
+        for (const e of events) if (e.imageUrl === url) e.imageUrl = null;
+      }
+    }
   }
 
   return events;
