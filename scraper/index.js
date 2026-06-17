@@ -181,9 +181,11 @@ for (const source of sources) {
     }
     run.ok = true;
   } catch (e) {
-    failures++;
     run.error = String(e.message || e).slice(0, 500);
-    console.error(`${source.id} FAILED: ${run.error}`);
+    // HTTP 5xx = venue server temporarily down; don't fail the CI run
+    const transient = /HTTP 5\d\d/.test(run.error);
+    if (!transient) failures++;
+    console.error(`${source.id} ${transient ? "WARN" : "FAILED"}: ${run.error}`);
     // Save what we saw for post-mortem (uploaded as a CI artifact on failure)
     try {
       mkdirSync("artifacts", { recursive: true });
