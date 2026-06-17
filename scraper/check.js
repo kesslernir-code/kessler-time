@@ -12,10 +12,15 @@ const events = await upcomingEvents();
 
 // 1. auto-fix: backfill missing images from the event page's og:image, where the
 //    page is reachable (Facebook/Instagram are login-walled, so skip those).
+// Skip URLs shared by 3+ events (listing pages, not individual event pages).
+const urlFreq = new Map();
+for (const e of events) if (e.event_url) urlFreq.set(e.event_url, (urlFreq.get(e.event_url) || 0) + 1);
+
 let fixed = 0, tried = 0;
 for (const e of events) {
   if (e.image_url || !e.event_url) continue;
   if (/facebook\.com|instagram\.com/.test(e.event_url)) continue;
+  if ((urlFreq.get(e.event_url) || 1) >= 3) continue; // shared listing URL — skip
   if (tried >= 80) break;
   tried++;
   const img = await fetchOgImage(e.event_url);

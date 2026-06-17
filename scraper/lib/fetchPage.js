@@ -54,16 +54,33 @@ export async function fetchPageInfo(url) {
   }
 }
 
-/** Read a page's og:image (poster). Generic fallback when an API gives no image. */
+/** Read a page's best image (og:image → twitter:image → first large img). */
 export async function fetchOgImage(url) {
   try {
     const html = await fetchText(url, { retries: 0, timeoutMs: 15000 });
-    const m =
-      html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    const url2 = m && m[1];
-    if (!url2 || /logo|placeholder|sprite|favicon|default|blank/i.test(url2)) return null;
-    return url2.replace(/&amp;/g, "&");
+    const BAD = /logo|placeholder|sprite|favicon|blank|default\.(png|jpg|gif|webp)/i;
+
+    // og:image (both attribute orders)
+    const og =
+      html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1];
+    if (og && !BAD.test(og)) return og.replace(/&amp;/g, "&");
+
+    // twitter:image fallback
+    const tw =
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i)?.[1];
+    if (tw && !BAD.test(tw)) return tw.replace(/&amp;/g, "&");
+
+    // first <img> that looks like a content image (not tiny icons)
+    for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+      const src = m[1];
+      if (!src.startsWith("http")) continue;
+      if (BAD.test(src)) continue;
+      if (/icon|avatar|pixel|spacer|1x1|logo/i.test(src)) continue;
+      return src;
+    }
+    return null;
   } catch {
     return null;
   }

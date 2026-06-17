@@ -91,23 +91,30 @@ export async function scrape(source, log = console.error) {
 
   let html = await fetchText(source.url);
 
-  // Rung 1: JSON-LD on the static HTML
-  let events = jsonLdEvents(html, source);
-  if (events.length) { log(`  [${source.id}] ladder rung: json-ld (${events.length})`); return events; }
+  // Detect Wix/SPA sites early: their static HTML is a JS shell with no event data.
+  // Skip straight to browser rendering so we get the real DOM + images.
+  const isWix = /wixsite\.com|_wix_|wix-warmup-data|parastorage\.com/i.test(html);
+  if (!isWix) {
+    // Rung 1: JSON-LD on the static HTML
+    let events = jsonLdEvents(html, source);
+    if (events.length) { log(`  [${source.id}] ladder rung: json-ld (${events.length})`); return events; }
 
-  // Rung 2: AI over the static text
-  events = await aiExtract(html);
-  if (events.length) { log(`  [${source.id}] ladder rung: ai-extraction (${events.length})`); return events; }
+    // Rung 2: AI over the static text
+    events = await aiExtract(html);
+    if (events.length) { log(`  [${source.id}] ladder rung: ai-extraction (${events.length})`); return events; }
+  } else {
+    log(`  [${source.id}] Wix detected — skipping static rungs`);
+  }
 
   // Rung 3: nothing from static HTML — the site likely renders events with
   // JavaScript (Wix, SPAs). Render in a real browser and try JSON-LD + AI again.
   log(`  [${source.id}] static empty — rendering with browser…`);
   const rendered = await renderWithPuppeteer(source.url);
   if (!rendered) { log(`  [${source.id}] render unavailable`); return []; }
-  events = jsonLdEvents(rendered.html, source);
-  if (events.length) { log(`  [${source.id}] ladder rung: render+json-ld (${events.length})`); return events; }
-  events = await aiExtract(rendered.html);
-  if (events.length) { log(`  [${source.id}] ladder rung: render+ai (${events.length})`); return events; }
+  let renderedEvents = jsonLdEvents(rendered.html, source);
+  if (renderedEvents.length) { log(`  [${source.id}] ladder rung: render+json-ld (${renderedEvents.length})`); return renderedEvents; }
+  renderedEvents = await aiExtract(rendered.html);
+  if (renderedEvents.length) { log(`  [${source.id}] ladder rung: render+ai (${renderedEvents.length})`); return renderedEvents; }
 
   // Rung 4: vision — the page's events are poster IMAGES with text baked in
   // (Wix/Webflow galleries, flyers). Read the largest images with Claude vision.
