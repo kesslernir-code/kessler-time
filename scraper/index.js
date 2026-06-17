@@ -94,6 +94,10 @@ const completeness = (e) =>
  * posts (or re-scraped tomorrow) collapses into one row; the most complete
  * duplicate wins.
  */
+// Strip control characters (incl. NUL bytes that PostgreSQL rejects, seen in
+// some scraped HTML) so the upsert body is always valid for the DB.
+const clean = (s) => (typeof s === "string" ? s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim() : s);
+
 function normalize(raw, source) {
   const byId = new Map();
   const cutoff = Date.now() - 3 * 3600_000; // keep events started <3h ago
@@ -105,8 +109,8 @@ function normalize(raw, source) {
     const row = {
       id: `${source.id}_${shortHash(canonTitle(e.title) + "_" + ilDay(startsAt))}`,
       source_id: source.id,
-      title: e.title.slice(0, 300),
-      description: e.description || null,
+      title: clean(e.title).slice(0, 300),
+      description: clean(e.description) || null,
       starts_at: startsAt,
       ends_at: e.endsAt || null,
       venue: source.venue,
