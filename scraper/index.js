@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
 import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl, titlesSimilar } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneSourceEvents } from "./lib/db.js";
+import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneStaleEvents } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
 import { fetchOgImage, fetchPageInfo } from "./lib/fetchPage.js";
@@ -199,9 +199,6 @@ for (const source of sources) {
       if (events.length > 8) console.log(`  ... +${events.length - 8} more`);
     } else {
       await upsertEvents(events);
-      // Remove stale upcoming rows this run no longer produces (old duplicates,
-      // dropped listings). Guarded inside pruneSourceEvents to never run on [].
-      await pruneSourceEvents(source.id, events.map((e) => e.id));
       console.log(`${source.id}: ${events.length} events upserted (${raw.length} found) via ${source.strategy}`);
     }
     run.ok = true;
@@ -244,6 +241,12 @@ if (!DRY && !only) {
 }
 
 await closeBrowser();
+
+// Remove events no source has re-seen in 48h (stale duplicates / dropped listings).
+// Skipped for single-source runs so a --source scan can't prune everyone else.
+if (!DRY && !only) {
+  try { await pruneStaleEvents(48); } catch (e) { console.error(`prune failed: ${e.message}`); }
+}
 
 if (failures) {
   console.error(`\n${failures} source(s) failed`);

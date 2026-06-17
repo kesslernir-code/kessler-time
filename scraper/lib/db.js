@@ -94,14 +94,15 @@ export async function deleteSourceEvents(id) {
   await rest(`events?source_id=eq.${id}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
 }
 
-/** Remove a source's UPCOMING events that the latest scrape no longer produced
- *  (e.g. de-duplicated title variants, dropped listings). Only called after a
- *  successful scrape that returned events, so a failed run never prunes. */
-export async function pruneSourceEvents(sourceId, keepIds) {
-  if (!dbConfigured() || !keepIds.length) return;
+/** Remove UPCOMING events that haven't been re-seen by any scrape in `hours`
+ *  (stale: de-duplicated title variants, removed listings). Time-based so a
+ *  source that merely varies or fails one run never loses data — an event must
+ *  be missing for the whole window. Manual entries are never pruned. */
+export async function pruneStaleEvents(hours = 48) {
+  if (!dbConfigured()) return;
+  const cutoff = encodeURIComponent(new Date(Date.now() - hours * 3600e3).toISOString());
   const now = encodeURIComponent(new Date(Date.now() - 3 * 3600e3).toISOString());
-  const keep = keepIds.map((id) => `"${id}"`).join(",");
-  await rest(`events?source_id=eq.${sourceId}&starts_at=gte.${now}&id=not.in.(${keep})`, {
+  await rest(`events?last_seen_at=lt.${cutoff}&starts_at=gte.${now}&source_id=neq.manual`, {
     method: "DELETE",
     headers: { Prefer: "return=minimal" },
   });
