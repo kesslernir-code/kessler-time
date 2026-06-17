@@ -11,8 +11,6 @@ if (!ampi) {
   await updateSourceRow(ampi.id, {
     url: "https://amphitlv.co.il/",
     strategy: "amphitlv",
-    platform: null,
-    handle: null,
   });
   // Drop old imageless events so the next scrape repopulates them with posters.
   await deleteSourceEvents(ampi.id);
