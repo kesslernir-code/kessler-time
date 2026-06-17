@@ -27,6 +27,7 @@ jobs:
           node scraper/migrate-amphitlv.js
           node scraper/migrate-cinema.js
           node scraper/migrate-epgb.js
+          node scraper/migrate-gagarin.js
       - name: Run scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

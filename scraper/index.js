@@ -44,6 +44,7 @@ import * as socialVenue from "./strategies/socialVenue.js";
 import * as amphitlv from "./strategies/amphitlv.js";
 import * as cinema from "./strategies/cinema.js";
 import * as epgb from "./strategies/epgb.js";
+import * as tribeEvents from "./strategies/tribeEvents.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -57,6 +58,7 @@ const strategies = {
   [amphitlv.name]: amphitlv,
   [cinema.name]: cinema,
   [epgb.name]: epgb,
+  [tribeEvents.name]: tribeEvents,
 };
 
 const args = process.argv.slice(2);
