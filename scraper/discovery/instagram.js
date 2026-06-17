@@ -9,6 +9,10 @@ import { knownEventUrls } from "../lib/db.js";
 export const platform = "instagram";
 
 export async function discover(source, log = console.error) {
+  if (!process.env.APIFY_TOKEN) {
+    log(`  [${source.id}] instagram: skipped (no APIFY_TOKEN)`);
+    return [];
+  }
   const newerThan = new Date(Date.now() - 35 * 864e5).toISOString().slice(0, 10); // YYYY-MM-DD
   const items = await runActor("apify/instagram-scraper", {
     directUrls: [`https://www.instagram.com/${source.handle}/`],

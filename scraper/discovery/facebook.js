@@ -88,61 +88,76 @@ function parseEventsPage(html) {
   return events;
 }
 
-async function structuredEvents(handle, log, id) {
-  const url = `${MBASIC}/${handle}/events`;
-  log(`  [${id}] fb mbasic events: ${url}`);
+function isLoginWall(html) {
+  return html.includes('login_form') || html.includes('log in to facebook') ||
+    html.includes('you must log in') || (html.includes('log in') && html.length < 8000);
+}
+
+async function fetchMbasic(url, id, log) {
   try {
     const { html } = await renderPage(url, { timeoutMs: 30000, settleMs: 800 });
-    const events = parseEventsPage(html);
-    log(`  [${id}] fb mbasic structured events: ${events.length}`);
-    return events;
+    const title = html.match(/<title[^>]*>([^<]+)/i)?.[1] || '';
+    log(`  [${id}] fb page title: "${title.slice(0, 80)}"`);
+    if (isLoginWall(html.toLowerCase())) {
+      log(`  [${id}] fb login wall detected — skipping`);
+      return null;
+    }
+    return html;
   } catch (err) {
-    log(`  [${id}] fb mbasic events error: ${err.message}`);
-    return [];
+    log(`  [${id}] fb fetch error: ${err.message}`);
+    return null;
   }
+}
+
+async function structuredEvents(handle, log, id) {
+  log(`  [${id}] fb events: fetching mbasic.facebook.com/${handle}/events`);
+  const html = await fetchMbasic(`${MBASIC}/${handle}/events`, id, log);
+  if (!html) return [];
+  const events = parseEventsPage(html);
+  log(`  [${id}] fb structured events: ${events.length}`);
+  return events;
 }
 
 async function eventsFromPosts(handle, source, log) {
   if (!aiConfigured()) return [];
-  const url = `${MBASIC}/${handle}`;
-  log(`  [${source.id}] fb mbasic posts: ${url}`);
-  let html;
-  try {
-    ({ html } = await renderPage(url, { timeoutMs: 30000, settleMs: 800 }));
-  } catch (err) {
-    log(`  [${source.id}] fb mbasic posts error: ${err.message}`);
-    return [];
-  }
+  log(`  [${source.id}] fb posts: fetching mbasic.facebook.com/${handle}`);
+  const html = await fetchMbasic(`${MBASIC}/${handle}`, source.id, log);
+  if (!html) return [];
 
   const known = await knownEventUrls(source.id);
   const posts = [];
 
-  // mbasic posts have permalink-style links; extract the surrounding text block
-  const storyRe = /<div[^>]*role="article"[^>]*>([\s\S]*?)<\/div>/g;
-  let m;
-  while ((m = storyRe.exec(html)) !== null && posts.length < 25) {
-    const block = m[1];
-    const postText = stripHtml(block).trim();
-    if (postText.length < 20) continue;
-    // find a permalink URL in the block
-    const urlMatch = block.match(/href="(https?:\/\/www\.facebook\.com\/[^"?]+\/(?:posts|permalink)\/[^"?]+)/);
-    const postUrl = urlMatch ? urlMatch[1] : null;
-    if (!postUrl || known.has(postUrl)) continue;
-    posts.push({ url: postUrl, text: postText, image: null, posted: "" });
+  // Extract text blocks from mbasic — stories appear as divs with role="article"
+  // or as blocks separated by <hr> or story links. Try multiple patterns.
+  const pageText = stripHtml(html).trim();
+  const textChunks = pageText.split(/\n{3,}/).filter(t => t.trim().length > 30);
+  log(`  [${source.id}] fb posts: ${textChunks.length} text chunks`);
+
+  // Also try to find story permalink URLs
+  const permalinkRe = /href="(https?:\/\/(?:www|mbasic)\.facebook\.com\/[^"?]+\/(?:posts|permalink|story)[^"]*)/g;
+  const seenUrls = new Set();
+  let pm;
+  while ((pm = permalinkRe.exec(html)) !== null && posts.length < 20) {
+    const postUrl = pm[1].replace(/&amp;/g, '&');
+    if (seenUrls.has(postUrl) || known.has(postUrl)) continue;
+    seenUrls.add(postUrl);
+    posts.push({ url: postUrl, text: '', image: null, posted: '' });
   }
 
-  // Second-pass fallback: mbasic story_fbid links
-  if (!posts.length) {
-    const fbidRe = /href="(https?:\/\/mbasic\.facebook\.com\/story\.php[^"]*)"[^>]*>([\s\S]*?)(?=href="https?:\/\/mbasic\.facebook\.com\/story\.php|$)/g;
-    while ((fbidRe.exec(html)) !== null && posts.length < 25) {
-      // We just need text blobs — use the page text split by visual separators
-    }
-    log(`  [${source.id}] fb posts: 0 posts extracted via regex`);
-    return [];
+  // Pair text chunks with posts or use as standalone
+  if (!posts.length && textChunks.length) {
+    textChunks.slice(0, 20).forEach((t, i) => posts.push({ url: `${MBASIC}/${handle}#chunk${i}`, text: t, image: null, posted: '' }));
+  } else {
+    posts.forEach((p, i) => { p.text = textChunks[i] || ''; });
   }
+
+  const validPosts = posts.filter(p => p.text.length > 20);
+  log(`  [${source.id}] fb posts: ${validPosts.length} valid posts`);
+
+  if (!validPosts.length) return [];
 
   const fields = await extractSocialEvents(
-    posts.map((p, i) => ({
+    validPosts.map((p, i) => ({
       key: String(i),
       posted: p.posted,
       text: p.text,
@@ -152,7 +167,7 @@ async function eventsFromPosts(handle, source, log) {
   );
 
   const out = [];
-  posts.forEach((p, i) => {
+  validPosts.forEach((p, i) => {
     const f = fields.get(String(i));
     if (!f?.is_event || !f.date) return;
     const [y, mo, d] = f.date.split("-").map(Number);
