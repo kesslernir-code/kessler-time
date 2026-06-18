@@ -1,6 +1,8 @@
 // Headless-browser rendering via the machine's installed Chrome (puppeteer-core,
 // no browser download). Used for JS-shell pages: ticket platforms, SPA sites.
 // One shared browser per run; callers must call closeBrowser() at the end.
+import { isJunkImageUrl } from "./util.js";
+
 let browserPromise = null;
 
 async function getBrowser() {
@@ -47,7 +49,7 @@ export async function renderPage(url, { timeoutMs = 45000, settleMs = 1200, scro
         .sort((a, b) => b.w * b.h - a.w * a.h)
         .map((x) => x.src);
     });
-    return { text, html, images: [...new Set(images)] };
+    return { text, html, images: [...new Set(images)].filter((u) => !isJunkImageUrl(u)) };
   } finally {
     await page.close().catch(() => {});
   }

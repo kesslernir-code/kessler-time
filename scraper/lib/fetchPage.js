@@ -1,3 +1,5 @@
+import { isJunkImageUrl } from "./util.js";
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
 
@@ -45,7 +47,7 @@ export async function fetchPageInfo(url) {
         "").trim();
     const { decodeEntities } = await import("./util.js");
     return {
-      image: image && !/logo|placeholder|sprite/i.test(image) ? image.replace(/&amp;/g, "&") : null,
+      image: image && !/logo|placeholder|sprite/i.test(image) && !isJunkImageUrl(image) ? image.replace(/&amp;/g, "&") : null,
       description: rawDesc ? decodeEntities(rawDesc) : null,
       phone: phone || null,
     };
@@ -64,13 +66,13 @@ export async function fetchOgImage(url) {
     const og =
       html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1];
-    if (og && !BAD.test(og)) return og.replace(/&amp;/g, "&");
+    if (og && !BAD.test(og) && !isJunkImageUrl(og)) return og.replace(/&amp;/g, "&");
 
     // twitter:image fallback
     const tw =
       html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i)?.[1];
-    if (tw && !BAD.test(tw)) return tw.replace(/&amp;/g, "&");
+    if (tw && !BAD.test(tw) && !isJunkImageUrl(tw)) return tw.replace(/&amp;/g, "&");
 
     // first <img> that looks like a content image (not tiny icons)
     for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
@@ -78,6 +80,7 @@ export async function fetchOgImage(url) {
       if (!src.startsWith("http")) continue;
       if (BAD.test(src)) continue;
       if (/icon|avatar|pixel|spacer|1x1|logo/i.test(src)) continue;
+      if (isJunkImageUrl(src)) continue;
       return src;
     }
     return null;

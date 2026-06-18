@@ -2,7 +2,7 @@
 // Usage: node scraper/index.js [--dry-run] [--source=<id>]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
-import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl, titlesSimilar } from "./lib/util.js";
+import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl, titlesSimilar, isJunkImageUrl } from "./lib/util.js";
 import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneStaleEvents } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
@@ -127,7 +127,7 @@ function normalize(raw, source) {
       is_free: e.isFree ?? null,
       booking_url: e.bookingUrl || null,
       event_url: e.eventUrl || null,
-      image_url: e.imageUrl || null,
+      image_url: isJunkImageUrl(e.imageUrl) ? null : e.imageUrl || null, // drop FB pixels/post links
       lang: e.lang || "he",
       confidence: e.confidence ?? 0.7,
     };

@@ -1,21 +1,56 @@
 // Post-scrape QA "checking agent" + escalation. Runs after scrape + discover.
+//   0. DROP junk image_urls (FB pixels / social post links) and VERIFY every
+//      remaining poster actually loads through the same proxy the site uses — a
+//      stored image_url that 404s shows a broken-image placeholder to visitors,
+//      so "has an image_url" is not the same as "shows a poster".
 //   1. ESCALATION ladder to rescue missing images, per event:
 //        a. og:image / twitter:image / first content <img> from the event page
 //        b. if that page is the event's OWN page, render it and grab the poster
+//        c. Facebook pages: pull the poster via FB's link-preview crawler and
+//           re-host it in Supabase Storage (login-free, no Apify cost)
 //      (events whose only link is the source homepage are skipped — there is no
 //       per-event image to find, and the shared banner is rejected upstream.)
 //   2. AUDIT every upcoming event for completeness (image / date / link / desc).
 //   3. QC GATE: per-source image coverage with pass/warn/fail markers, so a
-//      regression (a source that used to have posters and suddenly doesn't)
-//      surfaces loudly instead of shipping placeholders silently.
+//      regression surfaces loudly instead of shipping placeholders silently.
 // Usage: node scraper/check.js
 import { dbConfigured, upcomingEvents, updateEvent, logRun } from "./lib/db.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 import { renderPage, closeBrowser } from "./lib/render.js";
+import { isJunkImageUrl } from "./lib/util.js";
+import { facebookPoster, rehostImage, ensureBucket } from "./lib/storage.js";
 
 if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(0); }
 
 const events = await upcomingEvents();
+
+// The page renders posters through wsrv.nl; if the proxy can't fetch the URL the
+// visitor sees a broken-image placeholder. Verify the URL really resolves to an image.
+const proxy = (u) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=320&h=320&fit=cover&output=webp`;
+async function imageLoads(u) {
+  // Two attempts — a transient proxy hiccup must not wipe a valid poster.
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await fetch(proxy(u), { method: "GET", signal: AbortSignal.timeout(20000) });
+      if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) return true;
+      if (r.status >= 400 && r.status < 500) return false; // 404/403 won't fix on retry
+    } catch { /* network error — retry once */ }
+  }
+  return false;
+}
+async function mapLimit(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) await fn(items[i++]); }));
+}
+
+// 0. DROP junk image_urls (no network), then validate the rest actually load.
+let junked = 0, broke = 0;
+for (const e of events) {
+  if (e.image_url && isJunkImageUrl(e.image_url)) { await updateEvent(e.id, { image_url: null }); e.image_url = null; junked++; }
+}
+await mapLimit(events.filter((e) => e.image_url), 8, async (e) => {
+  if (!(await imageLoads(e.image_url))) { await updateEvent(e.id, { image_url: null }); e.image_url = null; broke++; }
+});
 
 // URLs shared by 3+ events are listing/home pages, not individual event pages —
 // their og:image is a site banner, useless as a per-event poster.
@@ -31,15 +66,17 @@ async function renderPoster(url) {
   } catch { return null; }
 }
 
+await ensureBucket();
+
 // 1. ESCALATION
-let fixedOg = 0, fixedRender = 0, triedOg = 0, triedRender = 0;
+let fixedOg = 0, fixedRender = 0, fixedFb = 0, triedOg = 0, triedRender = 0, triedFb = 0;
 const needRender = [];
 for (const e of events) {
   if (e.image_url || !isIndividual(e.event_url)) continue;
   if (triedOg >= 80) break;
   triedOg++;
   const img = await fetchOgImage(e.event_url);
-  if (img) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedOg++; }
+  if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedOg++; }
   else needRender.push(e);
 }
 // Rung b: render the still-missing individual pages (capped — rendering is slow).
@@ -47,10 +84,19 @@ for (const e of needRender) {
   if (triedRender >= 15) break;
   triedRender++;
   const img = await renderPoster(e.event_url);
-  if (img) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedRender++; }
+  if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedRender++; }
 }
 await closeBrowser();
-const fixed = fixedOg + fixedRender;
+// Rung c: Facebook pages — poster via the link-preview crawler, re-hosted to Storage.
+for (const e of events) {
+  if (e.image_url || !e.event_url || !/facebook\.com/.test(e.event_url)) continue;
+  if (triedFb >= 40) break;
+  triedFb++;
+  const fb = await facebookPoster(e.event_url);
+  const img = fb ? await rehostImage(fb, e.id) : null;
+  if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedFb++; }
+}
+const fixed = fixedOg + fixedRender + fixedFb;
 
 // 2. AUDIT
 const isBad = (e) => !e.starts_at || Number.isNaN(Date.parse(e.starts_at));
@@ -82,7 +128,7 @@ const warns = qc.filter((q) => q.mark === "warn");
 // REPORT
 console.log(`\n=== HEALTH CHECK ===`);
 console.log(`upcoming events: ${events.length}`);
-console.log(`images: ${events.length - noImg.length}/${events.length} (${noImg.length} missing; rescued ${fixedOg} og + ${fixedRender} render)`);
+console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${fixedFb} fb)`);
 console.log(`missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
 console.log(`per source (events · image · desc · link):`);
 for (const [k, s] of Object.entries(bySrc).sort()) {
@@ -100,6 +146,6 @@ if (warns.length) {
 }
 if (noImg.length) { console.log(`\nmissing image (first 40):`); noImg.slice(0, 40).forEach((e) => console.log(`  [${e.source_id}] ${(e.title || "").slice(0, 45)}`)); }
 
-const summary = `${events.length} events · ${noImg.length} no-image · ${fails.length} src FAIL · ${warns.length} src WARN · rescued ${fixed}`;
+const summary = `${events.length} events · ${noImg.length} no-image · ${junked + broke} bad-img-dropped · ${fails.length} src FAIL · ${warns.length} src WARN · rescued ${fixed}`;
 await logRun({ source_id: "health-check", strategy: "check", events_found: events.length, events_upserted: events.length - noImg.length, ok: fails.length === 0, duration_ms: 0, error: summary });
 console.log(`\n${fails.length === 0 ? "✓ QC pass (no source below 50% images)" : `✗ QC: ${fails.length} source(s) below 50% images`}`);

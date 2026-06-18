@@ -134,3 +134,18 @@ export function findTicketLink(html = "") {
 
 export const todayISODate = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date()); // YYYY-MM-DD
+
+/** True for URLs that crept in as image_url but won't render as a poster:
+ *  Meta tracking pixels (facebook.com/tr), social post/page links, FB plugins.
+ *  Conservative — only matches clearly-non-image URLs, never real upload paths. */
+export function isJunkImageUrl(u = "") {
+  const s = String(u || "");
+  if (!s) return true;
+  return (
+    /facebook\.com\/tr\b/i.test(s) || // Meta Pixel (1x1 noscript img)
+    /facebook\.com\/[^/]+\/(posts|videos|photos)\//i.test(s) || // FB page links, not images
+    /facebook\.com\/(permalink|story|events|watch)\b/i.test(s) ||
+    /instagram\.com\/(p|reel|tv)\//i.test(s) || // IG post links
+    /\/plugins\/(like|post|page|comments)/i.test(s) // FB social plugins
+  );
+}
