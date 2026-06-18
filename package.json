@@ -7,8 +7,6 @@
   "scripts": {
     "scrape": "node scraper/index.js",
     "scrape:dry": "node scraper/index.js --dry-run",
-    "discover": "node scraper/discover.js",
-    "discover:dry": "node scraper/discover.js --dry-run",
     "serve": "node web/dev-server.mjs"
   },
   "engines": {

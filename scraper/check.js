@@ -6,8 +6,6 @@
 //   1. ESCALATION ladder to rescue missing images, per event:
 //        a. og:image / twitter:image / first content <img> from the event page
 //        b. if that page is the event's OWN page, render it and grab the poster
-//        c. Facebook pages: pull the poster via FB's link-preview crawler and
-//           re-host it in Supabase Storage (login-free, no Apify cost)
 //      (events whose only link is the source homepage are skipped — there is no
 //       per-event image to find, and the shared banner is rejected upstream.)
 //   2. AUDIT every upcoming event for completeness (image / date / link / desc).
@@ -18,7 +16,6 @@ import { dbConfigured, upcomingEvents, updateEvent, logRun } from "./lib/db.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 import { renderPage, closeBrowser } from "./lib/render.js";
 import { isJunkImageUrl } from "./lib/util.js";
-import { facebookPoster, rehostImage, ensureBucket } from "./lib/storage.js";
 
 if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(0); }
 
@@ -66,10 +63,8 @@ async function renderPoster(url) {
   } catch { return null; }
 }
 
-await ensureBucket();
-
 // 1. ESCALATION
-let fixedOg = 0, fixedRender = 0, fixedFb = 0, triedOg = 0, triedRender = 0, triedFb = 0;
+let fixedOg = 0, fixedRender = 0, triedOg = 0, triedRender = 0;
 const needRender = [];
 for (const e of events) {
   if (e.image_url || !isIndividual(e.event_url)) continue;
@@ -87,16 +82,7 @@ for (const e of needRender) {
   if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedRender++; }
 }
 await closeBrowser();
-// Rung c: Facebook pages — poster via the link-preview crawler, re-hosted to Storage.
-for (const e of events) {
-  if (e.image_url || !e.event_url || !/facebook\.com/.test(e.event_url)) continue;
-  if (triedFb >= 40) break;
-  triedFb++;
-  const fb = await facebookPoster(e.event_url);
-  const img = fb ? await rehostImage(fb, e.id) : null;
-  if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedFb++; }
-}
-const fixed = fixedOg + fixedRender + fixedFb;
+const fixed = fixedOg + fixedRender;
 
 // 2. AUDIT
 const isBad = (e) => !e.starts_at || Number.isNaN(Date.parse(e.starts_at));
@@ -128,7 +114,7 @@ const warns = qc.filter((q) => q.mark === "warn");
 // REPORT
 console.log(`\n=== HEALTH CHECK ===`);
 console.log(`upcoming events: ${events.length}`);
-console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${fixedFb} fb)`);
+console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render)`);
 console.log(`missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
 console.log(`per source (events · image · desc · link):`);
 for (const [k, s] of Object.entries(bySrc).sort()) {

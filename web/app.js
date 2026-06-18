@@ -22,11 +22,11 @@
       tickets: "כרטיסים",
       recs: "המלצות",
       addPlace: "+ הוספת מקום",
-      social: "🔦 מתחת לרדאר",
       cat_fringe: "הופעות שוליים",
       cat_live: "הופעות חיות",
       cat_bohemia: "בוהמיה",
       cat_exhibitions: "תערוכות",
+      cat_galleries: "גלריות",
       cat_festival: "פסטיבלים",
       cat_cinema: "קולנועים",
       cat_bars: "ברים",
@@ -53,11 +53,11 @@
       tickets: "Tickets",
       recs: "Recommendations",
       addPlace: "+ Add place",
-      social: "🔦 Under the radar",
       cat_fringe: "Fringe",
       cat_live: "Live shows",
       cat_bohemia: "Bohemia",
       cat_exhibitions: "Exhibitions",
+      cat_galleries: "Galleries",
       cat_festival: "Festivals",
       cat_cinema: "Cinemas",
       cat_bars: "Bars",
@@ -92,7 +92,7 @@
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
-  const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
+  const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "galleries", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
   // shown as info-card listings, not event feeds
   const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
 
@@ -155,16 +155,19 @@
       return;
     }
     const since = new Date(Date.now() - 3 * 3600e3).toISOString();
-    const cols = "id,source_id,title,description,starts_at,venue,city,price_text,is_free,booking_url,event_url,image_url,kind";
+    const s = encodeURIComponent(since);
+    const cols = "id,source_id,title,description,starts_at,ends_at,venue,city,price_text,is_free,booking_url,event_url,image_url,kind";
+    // Keep an event if it hasn't started yet OR (multi-day runs / exhibitions)
+    // hasn't ended yet — so a currently-running exhibition stays visible.
     const url = (extra) =>
       `${CFG.SUPABASE_URL}/rest/v1/events?select=${cols}${extra}` +
-      `&starts_at=gte.${encodeURIComponent(since)}&order=starts_at.asc&limit=600`;
+      `&or=(starts_at.gte.${s},ends_at.gte.${s})&order=starts_at.asc&limit=600`;
     try {
       // ",category" gracefully degrades while the DB column doesn't exist yet
       let res = await fetch(url(",category"), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) res = await fetch(url(""), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
       if (!res.ok) throw new Error(res.status);
-      events = (await res.json()).filter((e) => e.kind !== "social"); // social events live on /social
+      events = (await res.json()).filter((e) => e.kind !== "social"); // drop any legacy under-radar rows
       renderCityChips();
       renderCatChips();
       render();
@@ -302,6 +305,8 @@
     const visible = events.filter(
       (e) =>
         !DIRECTORY_CATS.has(e.category || "") &&
+        // galleries (ongoing exhibitions) show only under their own chip, not the main mix
+        (catSel.has("galleries") || (e.category || "") !== "galleries") &&
         (!srcSel.size || srcSel.has(e.source_id)) &&
         (!citySel.size || citySel.has(e.city)) &&
         (!catSel.size || catSel.has(e.category || "fringe")) &&
@@ -362,7 +367,7 @@
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
     // Single-select: no "all" chip. Clicking a category makes it the only one.
-    const CAT_COLOR = { live: "cat-live", exhibitions: "cat-exhibitions", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
+    const CAT_COLOR = { live: "cat-live", exhibitions: "cat-exhibitions", galleries: "cat-galleries", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
         if (catSel.has(c)) return; // already the active category

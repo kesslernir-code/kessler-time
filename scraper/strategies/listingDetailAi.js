@@ -30,14 +30,25 @@ export async function scrape(source, log = console.error) {
   const listing = await fetchText(source.url);
   const base = new URL(source.url).origin;
 
+  // Which detail-page path segment links to the per-item pages. Defaults to
+  // "event" (Levontin 7's /events/<slug>); set config.linkPath (e.g.
+  // "exhibition") for sites that use a different segment.
+  const linkPath = source.config?.linkPath || "event";
+  const linkRe = new RegExp(`href="(https?://[^"]*/${linkPath}[^"]*)"`, "g");
+  // Some sites (WPML/artport) 500 on the bare detail URL and need their query
+  // string (?lang=en) kept; others (Levontin 7) put a per-occurrence sd= stamp
+  // in the query that must be stripped so occurrences dedupe. config.keepQuery
+  // toggles which behaviour applies.
+  const keepQuery = Boolean(source.config?.keepQuery);
+
   // Collect event links (+ sd date hint and nearby poster), newest occurrence wins
   const found = new Map(); // cleanUrl -> { sd, listImg }
-  for (const m of listing.matchAll(/href="(https?:\/\/[^"]*\/event[^"]*)"/g)) {
+  for (const m of listing.matchAll(linkRe)) {
     const raw = decodeEntities(m[1]);
     if (!raw.startsWith(base)) continue;
     const u = new URL(raw);
     const sd = Number(u.searchParams.get("sd")) || null;
-    const clean = u.origin + u.pathname;
+    const clean = u.origin + u.pathname + (keepQuery ? u.search : "");
     const prev = found.get(clean) || {};
     found.set(clean, { sd: prev.sd || sd, listImg: prev.listImg || listingImageNear(listing, m[1]) });
   }
@@ -98,6 +109,13 @@ export async function scrape(source, log = console.error) {
     if (!d.title || !date) continue;
     const [y, mo, day] = date.split("-").map(Number);
     const [hh, mm] = (f.time || "20:00").split(":").map(Number);
+    // Exhibitions/multi-day runs: keep the closing date so the event stays
+    // visible until it actually ends (normalize keeps future-ending events).
+    let endsAt = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(f.end_date || "")) {
+      const [ey, emo, ed] = f.end_date.split("-").map(Number);
+      endsAt = israelISO(ey, emo, ed, 23, 59);
+    }
     const { priceText, isFree } = reconcilePrice(f.price_text, f.is_free);
     // The longest paragraph of a detail page is almost always the event description
     const description =
@@ -107,6 +125,7 @@ export async function scrape(source, log = console.error) {
       title: d.title,
       description: description && description.length > 60 ? description : null,
       startsAt: israelISO(y, mo, day, hh, mm),
+      endsAt,
       priceText,
       isFree,
       bookingUrl: findTicketLink(d.html) || f.booking_url || d.url,

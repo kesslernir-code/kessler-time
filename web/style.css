@@ -35,13 +35,6 @@ body {
 }
 .top-link:hover { color: var(--text); border-color: var(--accent-2); }
 .add-link { color: var(--accent); }
-.social-link { color: var(--accent-2); border-color: #2c3a5a; }
-.radar-title { margin: 16px 0 2px; font-size: 22px; font-weight: 800; }
-
-/* Under-radar grid: rectangular (landscape) picture cards, a denser grid */
-.social-page .cards { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.social-page .card .img { aspect-ratio: 16 / 10; }
-@media (max-width: 620px) { .social-page .cards { grid-template-columns: 1fr; } }
 .logo-wrap { display: flex; align-items: center; gap: 12px; }
 .logo-icon { width: 42px; height: 42px; border-radius: 10px; display: block; }
 .logo { font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
@@ -71,6 +64,8 @@ body {
 .chip.cat-live.on         { background: #f87171; color: #0e0f13; border-color: #f87171; }
 .chip.cat-exhibitions     { border-color: #2dd4bf; color: #2dd4bf; }
 .chip.cat-exhibitions.on  { background: #2dd4bf; color: #0e0f13; border-color: #2dd4bf; }
+.chip.cat-galleries       { border-color: #e879f9; color: #e879f9; }
+.chip.cat-galleries.on    { background: #e879f9; color: #0e0f13; border-color: #e879f9; }
 .chip.cat-festival        { border-color: #a78bfa; color: #a78bfa; }
 .chip.cat-festival.on     { background: #a78bfa; color: #0e0f13; border-color: #a78bfa; }
 .chip.cat-cinema          { border-color: #60a5fa; color: #60a5fa; }

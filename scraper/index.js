@@ -2,7 +2,7 @@
 // Usage: node scraper/index.js [--dry-run] [--source=<id>]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
-import { shortHash, jerusalemOffset, canonTitle, detectSocialUrl, titlesSimilar, isJunkImageUrl } from "./lib/util.js";
+import { shortHash, jerusalemOffset, canonTitle, titlesSimilar, isJunkImageUrl } from "./lib/util.js";
 import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneStaleEvents } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
@@ -40,7 +40,6 @@ import * as listingDetailAi from "./strategies/listingDetailAi.js";
 import * as wpMetaEvents from "./strategies/wpMetaEvents.js";
 import * as jaffaCinema from "./strategies/jaffaCinema.js";
 import * as wpAuto from "./strategies/wpAuto.js";
-import * as socialVenue from "./strategies/socialVenue.js";
 import * as amphitlv from "./strategies/amphitlv.js";
 import * as cinema from "./strategies/cinema.js";
 import * as epgb from "./strategies/epgb.js";
@@ -111,7 +110,11 @@ function normalize(raw, source) {
     const startsAt = e.startsAt ?? (e.localDateTime ? e.localDateTime + jerusalemOffset(new Date(e.localDateTime)) : null);
     if (!e.title || !startsAt) continue;
     const t = Date.parse(startsAt);
-    if (Number.isNaN(t) || t < cutoff || t > Date.now() + 400 * 864e5) continue;
+    if (Number.isNaN(t) || t > Date.now() + 400 * 864e5) continue;
+    // Drop only if it has already STARTED and (for multi-day runs) already ENDED.
+    // An exhibition that opened last month but closes next month stays visible.
+    const endT = e.endsAt ? Date.parse(e.endsAt) : null;
+    if (t < cutoff && !(endT && endT >= cutoff)) continue;
     const row = {
       id: `${source.id}_${shortHash(canonTitle(e.title) + "_" + ilDay(startsAt))}`,
       source_id: source.id,
@@ -160,10 +163,6 @@ console.error(`sources: ${sources.map((s) => s.id).join(", ")} (${dbSources ? "f
 
 let failures = 0;
 
-// Social-page venues (Instagram/Facebook) cost Apify credits, so only scrape
-// them on the daily run / manual scans (SCRAPE_SOCIAL=1) — not every 3h cron.
-const socialOk = Boolean(only) || process.env.SCRAPE_SOCIAL === "1";
-
 for (const source of sources) {
   if (only && source.id !== only) continue;
 
@@ -182,14 +181,9 @@ for (const source of sources) {
     continue;
   }
 
-  const social = detectSocialUrl(source.url); // {platform,handle} | null
-  if (social && !socialOk) {
-    console.error(`${source.id}: skipped (social venue runs on the daily scan only)`);
-    continue;
-  }
-  const strategy = social ? socialVenue : strategies[source.strategy];
+  const strategy = strategies[source.strategy];
   const t0 = Date.now();
-  const run = { source_id: source.id, strategy: social ? "social-venue" : source.strategy, ok: false, events_found: 0, events_upserted: 0, error: null };
+  const run = { source_id: source.id, strategy: source.strategy, ok: false, events_found: 0, events_upserted: 0, error: null };
 
   try {
     if (!strategy) throw new Error(`unknown strategy "${source.strategy}"`);

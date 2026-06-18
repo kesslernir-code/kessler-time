@@ -29,7 +29,7 @@
   <div class="panel">
     <h2>Add a site to follow</h2>
     <div class="field"><label>Site name (e.g. "Levontin 7")</label><input id="fName" /></div>
-    <div class="field"><label>Events page URL — a website, or an Instagram / Facebook page (events pulled from the link)</label><input id="fUrl" placeholder="https://…  |  instagram.com/baveltlv  |  facebook.com/PageName" /></div>
+    <div class="field"><label>Events page URL — the venue's website events/calendar page</label><input id="fUrl" placeholder="https://example.com/events/" /></div>
     <div class="field"><label>Venue display name (optional — shown on event cards)</label><input id="fVenue" /></div>
     <div class="field"><label>City (optional, in Hebrew — e.g. תל אביב)</label><input id="fCity" /></div>
     <div class="field"><label>Category</label>
@@ -38,6 +38,7 @@
         <option value="live">הופעות חיות</option>
         <option value="bohemia">בוהמיה</option>
         <option value="exhibitions">תערוכות</option>
+        <option value="galleries">גלריות</option>
         <option value="festival">פסטיבלים</option>
         <option value="cinema">קולנועים</option>
         <option value="bars">ברים</option>
@@ -58,7 +59,7 @@
 
   <div class="panel" id="uploadPanel">
     <h2>📸 Add event from screenshot</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Take a screenshot of a Facebook/Instagram event and upload it — Claude will read the details automatically.</p>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Take a screenshot of an event poster or flyer and upload it — Claude will read the details automatically.</p>
     <div class="field">
       <label>Screenshot (JPG / PNG)</label>
       <input type="file" id="imgFile" accept="image/*" style="color:var(--text);background:var(--panel-2);border:1px solid #2c3040;border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer" />
@@ -117,17 +118,6 @@
       catch { return ""; }
     };
 
-    // Detect a discovery source (FB group / IG / Telegram / FB page) from a pasted URL
-    const detectSocial = (u) => {
-      u = (u || "").trim(); if (!u) return null;
-      let m;
-      if ((m = u.match(/instagram\.com\/([A-Za-z0-9_.]+)/))) return { platform: "instagram", handle: m[1] };
-      if ((m = u.match(/facebook\.com\/groups\/([A-Za-z0-9.]+)/))) return { platform: "fb-group", handle: m[1] };
-      if ((m = u.match(/(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z0-9_]+)/))) return { platform: "telegram", handle: m[1] };
-      if ((m = u.match(/facebook\.com\/([A-Za-z0-9.\-]+)/))) return { platform: "facebook", handle: m[1] };
-      return null;
-    };
-
     async function rpc(fn, args) {
       const res = await fetch(`${C.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
         method: "POST",
@@ -141,12 +131,7 @@
       const name = $("#fName").value.trim(), url = $("#fUrl").value.trim(), pass = $("#fPass").value;
       const msg = $("#msg");
       if (!name || !url || !pass) { msg.textContent = "name, URL and password are required"; msg.style.color = "#ff7a7a"; return; }
-      // an Instagram/Facebook page URL → id from its handle (events pulled from the link)
-      const soc = detectSocial(url);
-      let id;
-      if (soc && (soc.platform === "instagram" || soc.platform === "facebook")) {
-        id = (soc.platform === "instagram" ? "ig-" : "fb-") + soc.handle.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 27);
-      } else { id = slugify(url); }
+      const id = slugify(url); // source id from the site's domain
       if (!id) { msg.textContent = "that URL doesn't look valid"; msg.style.color = "#ff7a7a"; return; }
       $("#addBtn").disabled = true;
       try {
