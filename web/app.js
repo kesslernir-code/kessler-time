@@ -100,9 +100,43 @@
   let freeOnly = false;
   let query = "";
   let view = "events"; // "events" (dashboard) | "going" (מה כבר בתפריט)
-  // Events the user marked "going" — kept per-browser in localStorage (no login).
-  const going = new Set(JSON.parse(localStorage.getItem("kt-going") || "[]"));
-  const saveGoing = () => localStorage.setItem("kt-going", JSON.stringify([...going]));
+  // Events marked "going" — a SHARED list in the DB (going_list) so it syncs
+  // across all devices. localStorage is just a fast-paint cache until the DB
+  // load returns (and a fallback if the going_list table doesn't exist yet).
+  let going = new Set(JSON.parse(localStorage.getItem("kt-going") || "[]"));
+  const cacheGoing = () => localStorage.setItem("kt-going", JSON.stringify([...going]));
+
+  async function loadGoing() {
+    if (!configured) return;
+    try {
+      const res = await fetch(`${CFG.SUPABASE_URL}/rest/v1/going_list?select=event_id`, { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
+      if (!res.ok) return; // table not created yet → keep the localStorage cache
+      const rows = await res.json();
+      if (Array.isArray(rows)) { going = new Set(rows.map((r) => r.event_id)); cacheGoing(); render(); }
+    } catch {} // offline → keep the cache
+  }
+
+  // Toggle an event in the shared list: update locally first (snappy), then the DB.
+  async function markGoing(id, on) {
+    if (on) going.add(id); else going.delete(id);
+    cacheGoing();
+    if (view === "going") render();
+    if (!configured) return;
+    try {
+      if (on) {
+        await fetch(`${CFG.SUPABASE_URL}/rest/v1/going_list`, {
+          method: "POST",
+          headers: { apikey: CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify({ event_id: id }),
+        });
+      } else {
+        await fetch(`${CFG.SUPABASE_URL}/rest/v1/going_list?event_id=eq.${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: { apikey: CFG.SUPABASE_ANON_KEY, Prefer: "return=minimal" },
+        });
+      }
+    } catch {} // a failed write keeps the optimistic local state; re-syncs on next load
+  }
   const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "galleries", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
   // shown as info-card listings, not event feeds
   const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
@@ -247,10 +281,8 @@
     goLabel.addEventListener("click", stop);
     goLabel.addEventListener("keydown", stop);
     cb.addEventListener("change", () => {
-      if (cb.checked) going.add(e.id); else going.delete(e.id);
-      saveGoing();
       goLabel.classList.toggle("on", cb.checked);
-      if (view === "going") render(); // removing from the menu updates the list live
+      markGoing(e.id, cb.checked); // updates the shared DB list + re-renders the menu
     });
     a.querySelector(".body").appendChild(goLabel);
     return a;
@@ -506,4 +538,5 @@
   renderDateChips();
   loadSources();
   load();
+  loadGoing();
 })();

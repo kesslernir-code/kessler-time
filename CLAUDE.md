@@ -26,7 +26,10 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
   (Supabase REST), `util`.
 - `web/` — static page (`app.js`), admin (`admin.html`), status (`status.html`).
   Public filters are single-select (Date·City·Category·Place, "All" default,
-  cascading); the מה כבר בתפריט tab is a localStorage "going" list.
+  cascading); the מה כבר בתפריט tab is a SHARED "going" list in the public
+  `going_list` table (anon read+write RLS), synced across devices.
+  Asset URLs are versioned (app.js?v=N) — bump N when web/ changes so phones
+  pick it up; html/js/css are served must-revalidate (netlify.toml).
 - `netlify/functions/` — admin-only, password-gated (ADMIN_PW): `extract-event`
   (Claude Vision reads a screenshot), `save-event` (hosts the poster in the
   `event-images` Storage bucket + inserts a manual event via the service key —

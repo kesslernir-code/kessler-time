@@ -112,4 +112,5 @@ hosted in Supabase Storage; the event appears on the dashboard at its date.
 
 On the public page, every filter (Date · City · Category · Place) is single-select
 with an "All" default and cascades left-to-right; the **מה כבר בתפריט** tab lists
-events you marked "going" (kept per-browser in localStorage).
+events marked "going" (🎟 הולכים) — a **shared** list in the `going_list` table
+that syncs across all devices (run `supabase/schema14-going.sql` once to create it).
