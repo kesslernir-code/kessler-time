@@ -40,6 +40,14 @@ export async function knownEventUrls(sourceId) {
   return new Map(rows.filter((r) => r.event_url).map((r) => [r.event_url, r.id]));
 }
 
+/** Map of event id -> image_url for one source — lets a re-scrape keep a poster
+ *  the QA agent already found, instead of clobbering it back to null. */
+export async function knownImages(sourceId) {
+  if (!dbConfigured()) return new Map();
+  const rows = await rest(`events?source_id=eq.${sourceId}&image_url=not.is.null&select=id,image_url`);
+  return new Map(rows.map((r) => [r.id, r.image_url]));
+}
+
 /** Enabled sources from the DB, or null if unavailable (caller falls back to the file list). */
 export async function getSources() {
   if (!dbConfigured()) return null;

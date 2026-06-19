@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { sources as fileSources } from "./sources.js";
 import { shortHash, jerusalemOffset, canonTitle, titlesSimilar, isJunkImageUrl } from "./lib/util.js";
-import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneStaleEvents } from "./lib/db.js";
+import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, updateEvent, updateSourceRow, deleteSourceEvents, pruneStaleEvents, knownImages } from "./lib/db.js";
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
 import { fetchOgImage, fetchPageInfo } from "./lib/fetchPage.js";
@@ -190,6 +190,12 @@ for (const source of sources) {
     const raw = await strategy.scrape(source);
     const events = normalize(raw, source);
     dropSharedImages(events); // strip reused banners/logos before backfilling
+    // Keep a poster the QA agent already found: if this scrape produced no image
+    // for an event we already know, don't clobber the stored one back to null.
+    if (!DRY) {
+      const knownImg = await knownImages(source.id);
+      for (const e of events) if (!e.image_url && knownImg.has(e.id)) e.image_url = knownImg.get(e.id);
+    }
     await backfillImages(events, source); // og:image fallback when the API/feed gave no picture
     await enrichPrices(events); // fills prices from ticket pages when the venue page omits them
     run.events_found = raw.length;

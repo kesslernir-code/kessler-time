@@ -26,6 +26,22 @@ function listingImageNear(listing, linkRaw) {
   return imgs.pop() || null; // nearest one above the link
 }
 
+/** A detail page's own JSON-LD Event, when present (Wix event pages have one):
+ *  exact start/end (with timezone) and poster image — free, no AI needed. */
+function jsonLdEvent(html) {
+  for (const m of html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let j;
+    try { j = JSON.parse(m[1].trim()); } catch { continue; }
+    const nodes = Array.isArray(j) ? j : [j, ...(j["@graph"] || [])];
+    for (const n of nodes) {
+      if (!n || !/Event/i.test(String(n["@type"])) || !n.startDate) continue;
+      const img = typeof n.image === "string" ? n.image : n.image?.url || (Array.isArray(n.image) ? n.image[0] : null);
+      return { start: String(n.startDate), end: n.endDate ? String(n.endDate) : null, image: img || null };
+    }
+  }
+  return null;
+}
+
 export async function scrape(source, log = console.error) {
   const listing = await fetchText(source.url);
   const base = new URL(source.url).origin;
@@ -70,6 +86,7 @@ export async function scrape(source, log = console.error) {
         .trim();
       details.push({
         url, sd, html, title, listImg,
+        ld: jsonLdEvent(html),
         text: stripHtml(html).slice(0, 1400),
         detailImgs: [...html.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u)),
       });
@@ -80,19 +97,23 @@ export async function scrape(source, log = console.error) {
   }
 
   // An image appearing on many detail pages is site template (logo, sponsors) —
-  // never an event poster. The listing's per-event poster always wins.
+  // never an event poster. The listing's per-event poster always wins; the
+  // page's JSON-LD image is the last resort (Wix pages have no <img> in static HTML).
   const freq = new Map();
   for (const d of details) for (const u of new Set(d.detailImgs)) freq.set(u, (freq.get(u) || 0) + 1);
   const isCommon = (u) => details.length >= 3 && (freq.get(u) || 0) > details.length * 0.4;
-  for (const d of details) d.image = d.listImg || d.detailImgs.find((u) => !isCommon(u)) || null;
+  for (const d of details) d.image = d.listImg || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
 
-  // Short numeric keys + chunks of 20 keep each Claude response well under its size limit
-  const fields = new Map();
-  for (let i = 0; i < details.length; i += 20) {
-    const chunk = details.slice(i, i + 20);
+  // Detail pages with a JSON-LD Event give the date for free; only the rest need
+  // a Claude call to read the date out of the Hebrew text. Keyed by url (chunks
+  // of 20 keep each response well under the size limit).
+  const needAi = details.filter((d) => !d.ld?.start);
+  const fields = new Map(); // url -> extracted fields
+  for (let i = 0; i < needAi.length; i += 20) {
+    const chunk = needAi.slice(i, i + 20);
     const out = await extractFieldsBatch(
-      chunk.map((d, j) => ({
-        key: String(i + j),
+      chunk.map((d) => ({
+        key: d.url,
         title: d.title,
         text: d.text,
         links: [...d.html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map((m) => m[1]).filter((l) => !l.startsWith(base)).slice(0, 4),
@@ -103,28 +124,37 @@ export async function scrape(source, log = console.error) {
   }
 
   const events = [];
-  for (const [idx, d] of details.entries()) {
-    const f = fields.get(String(idx)) || {};
-    const date = f.date || (d.sd ? ilDateOf(d.sd) : null);
-    if (!d.title || !date) continue;
-    const [y, mo, day] = date.split("-").map(Number);
-    const [hh, mm] = (f.time || "20:00").split(":").map(Number);
-    // Exhibitions/multi-day runs: keep the closing date so the event stays
-    // visible until it actually ends (normalize keeps future-ending events).
-    let endsAt = null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(f.end_date || "")) {
-      const [ey, emo, ed] = f.end_date.split("-").map(Number);
-      endsAt = israelISO(ey, emo, ed, 23, 59);
+  for (const d of details) {
+    const f = fields.get(d.url) || {};
+    // Prefer the page's own JSON-LD date (exact, timezone-aware); fall back to the
+    // AI-read date, then the listing's sd= stamp.
+    let startsAt = null, endsAt = null;
+    if (d.ld?.start) {
+      startsAt = d.ld.start;
+      endsAt = d.ld.end;
+    } else {
+      const date = f.date || (d.sd ? ilDateOf(d.sd) : null);
+      if (!date) continue;
+      const [y, mo, day] = date.split("-").map(Number);
+      const [hh, mm] = (f.time || "20:00").split(":").map(Number);
+      startsAt = israelISO(y, mo, day, hh, mm);
+      // Exhibitions/multi-day runs: keep the closing date so the event stays
+      // visible until it actually ends (normalize keeps future-ending events).
+      if (/^\d{4}-\d{2}-\d{2}$/.test(f.end_date || "")) {
+        const [ey, emo, ed] = f.end_date.split("-").map(Number);
+        endsAt = israelISO(ey, emo, ed, 23, 59);
+      }
     }
+    if (!d.title || !startsAt) continue;
     const { priceText, isFree } = reconcilePrice(f.price_text, f.is_free);
     // The longest paragraph of a detail page is almost always the event description
     const description =
       d.text.split("\n").reduce((a, b) => (b.trim().length > a.length ? b.trim() : a), "").slice(0, 400) || null;
     events.push({
-      occurrenceKey: d.url + "_" + date,
+      occurrenceKey: d.url + "_" + startsAt.slice(0, 10),
       title: d.title,
       description: description && description.length > 60 ? description : null,
-      startsAt: israelISO(y, mo, day, hh, mm),
+      startsAt,
       endsAt,
       priceText,
       isFree,
@@ -132,7 +162,7 @@ export async function scrape(source, log = console.error) {
       eventUrl: d.url,
       imageUrl: d.image,
       lang: "he",
-      confidence: 0.85,
+      confidence: d.ld?.start ? 1.0 : 0.85,
     });
   }
   return events;
