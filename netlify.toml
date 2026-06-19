@@ -4,3 +4,20 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+# Always revalidate the app shell so phones pick up updates immediately instead
+# of showing a stale cached page. (Data comes from Supabase; images from wsrv.)
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
