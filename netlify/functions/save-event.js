@@ -23,8 +23,11 @@ async function run(event) {
   if (!process.env.ADMIN_PW || body.secret !== process.env.ADMIN_PW)
     return resp(401, { error: "wrong password" });
 
-  const SUPA = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
-  const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Tolerate the common Netlify paste mistake of including the whole ".env" line
+  // ("SUPABASE_URL=https://…") in the value box — strip a leading NAME= prefix.
+  const envVal = (v, name) => String(v || "").replace(new RegExp("^\\s*" + name + "\\s*=\\s*"), "").trim();
+  const SUPA = envVal(process.env.SUPABASE_URL, "SUPABASE_URL").replace(/\/$/, "");
+  const KEY = envVal(process.env.SUPABASE_SERVICE_ROLE_KEY, "SUPABASE_SERVICE_ROLE_KEY");
   if (!SUPA || !KEY) return resp(500, { error: "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured on Netlify" });
 
   const f = body.fields || {};
