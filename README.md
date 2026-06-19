@@ -88,8 +88,28 @@ npm run serve                    # preview the site at http://localhost:8731
 3. Failed GitHub Actions runs upload an `artifacts/` bundle with the error stack.
 4. Re-run manually: GitHub → Actions → "Scrape events" → Run workflow.
 
-## Secrets (GitHub repo → Settings → Secrets → Actions)
+## Secrets
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`. The public page
-uses only the anon key, baked into [web/config.js](web/config.js) (safe:
-row-level security allows SELECT only).
+**GitHub Actions** (repo → Settings → Secrets → Actions): `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`.
+
+**Netlify functions** (site → Settings → Environment variables): `ADMIN_PW`
+(admin-page password), `ANTHROPIC_API_KEY` (screenshot Vision extraction),
+`GH_TOKEN` (the ↻ Scan-now trigger), and — for the screenshot uploader —
+`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (it hosts the poster in the
+`event-images` Storage bucket and inserts the event server-side).
+
+The public page uses only the anon key, baked into [web/config.js](web/config.js)
+(safe: row-level security allows SELECT only).
+
+## Admin page (web/admin.html)
+
+Password-gated (ADMIN_PW). Add a website source, trigger a scan, fix missing
+images, or **add an event from a screenshot**: upload a poster → Claude Vision
+reads date/time/place automatically → add a category and a Facebook/Instagram
+link (the link opens when the card's picture is tapped) → Save. The poster is
+hosted in Supabase Storage; the event appears on the dashboard at its date.
+
+On the public page, every filter (Date · City · Category · Place) is single-select
+with an "All" default and cascades left-to-right; the **מה כבר בתפריט** tab lists
+events you marked "going" (kept per-browser in localStorage).

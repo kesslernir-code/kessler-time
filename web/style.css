@@ -51,6 +51,23 @@ body {
 
 .tagline { color: var(--muted); margin: 4px 0 18px; }
 
+/* Top tabs: dashboard feed vs. "מה כבר בתפריט" going list */
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #242837; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+  padding: 8px 14px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab.on { color: var(--text); border-bottom-color: var(--accent); }
+
+/* "Going" toggle on each card */
+.going {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-size: 13px; color: var(--muted); cursor: pointer; user-select: none;
+}
+.going input { accent-color: var(--accent); cursor: pointer; }
+.going.on { color: var(--accent); font-weight: 600; }
+
 .filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {

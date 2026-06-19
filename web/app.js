@@ -22,6 +22,10 @@
       tickets: "כרטיסים",
       recs: "המלצות",
       addPlace: "+ הוספת מקום",
+      tabEvents: "אירועים",
+      tabGoing: "מה כבר בתפריט",
+      going: "🎟 הולכים",
+      goingEmpty: "עדיין אין אירועים בתפריט — סמנו “הולכים” על אירוע",
       cat_fringe: "הופעות שוליים",
       cat_live: "הופעות חיות",
       cat_bohemia: "בוהמיה",
@@ -53,6 +57,10 @@
       tickets: "Tickets",
       recs: "Recommendations",
       addPlace: "+ Add place",
+      tabEvents: "Events",
+      tabGoing: "On my menu",
+      going: "🎟 Going",
+      goingEmpty: "Nothing on your menu yet — tap “Going” on an event",
       cat_fringe: "Fringe",
       cat_live: "Live shows",
       cat_bohemia: "Bohemia",
@@ -81,27 +89,23 @@
   // ---- state ----------------------------------------------------------
   let events = [];
   const configured = Boolean(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
-  // Each filter is a Set — empty Set means "all". Several chips can be active at once.
+  // Every filter is single-select with an "All" default: an empty Set means "all",
+  // otherwise it holds exactly one value. The filter order in the UI is
+  // Date → City → Category → Place, each narrowing the next.
   const srcSel = new Set();
   const citySel = new Set();
-  // Category is single-select: exactly one is always chosen (no "all" mode).
-  // The default landing category is הופעות שוליים (fringe).
-  const DEFAULT_CAT = "fringe";
-  const catSel = new Set([DEFAULT_CAT]);
-  const daySel = new Set(); // any of: today / tomorrow / weekend
+  const catSel = new Set();
+  const daySel = new Set(); // one of: today / tomorrow / weekend
   let specificDate = null; // a calendar-picked YYYY-MM-DD (exclusive of the presets)
   let freeOnly = false;
   let query = "";
+  let view = "events"; // "events" (dashboard) | "going" (מה כבר בתפריט)
+  // Events the user marked "going" — kept per-browser in localStorage (no login).
+  const going = new Set(JSON.parse(localStorage.getItem("kt-going") || "[]"));
+  const saveGoing = () => localStorage.setItem("kt-going", JSON.stringify([...going]));
   const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "galleries", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
   // shown as info-card listings, not event feeds
   const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
-
-  // Toggle val in a set; passing null clears the set ("all" chip).
-  const toggle = (set, val) => {
-    if (val === null) set.clear();
-    else if (set.has(val)) set.delete(val);
-    else set.add(val);
-  };
 
   // Venue sites often block hotlinked images (and serve huge files); the wsrv.nl
   // proxy fetches them neutrally and resizes — one fix for every problematic site.
@@ -130,7 +134,7 @@
     if (!configured) return;
     try {
       let res = await fetch(
-        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name,category,url,image,description,phone&order=added_at.asc`,
+        `${CFG.SUPABASE_URL}/rest/v1/sources?enabled=eq.true&select=id,name,category,city,url,image,description,phone&order=added_at.asc`,
         { headers: { apikey: CFG.SUPABASE_ANON_KEY } }
       );
       if (!res.ok) res = await fetch( // before schema9: no image/description/phone columns
@@ -140,7 +144,7 @@
       const rows = await res.json();
       if (Array.isArray(rows) && rows.length) {
         SOURCES = Object.fromEntries(
-          rows.map((r) => [r.id, { ...splitName(r.name), category: r.category || "fringe", url: r.url, image: r.image, description: r.description, phone: r.phone }])
+          rows.map((r) => [r.id, { ...splitName(r.name), category: r.category || "fringe", city: r.city, url: r.url, image: r.image, description: r.description, phone: r.phone }])
         );
         renderChips();
         render();
@@ -170,6 +174,7 @@
       events = (await res.json()).filter((e) => e.kind !== "social"); // drop any legacy under-radar rows
       renderCityChips();
       renderCatChips();
+      renderChips();
       render();
     } catch (e) {
       $("#stateMsg").textContent = `${t("error")} (${e.message})`;
@@ -231,6 +236,23 @@
     else desc.remove();
     // ticket button is a link of its own — don't trigger the card's link
     a.querySelector(".tix")?.addEventListener("click", (ev) => ev.stopPropagation());
+    // "going" toggle — adds/removes the event from the מה כבר בתפריט tab (local only)
+    const goLabel = document.createElement("label");
+    goLabel.className = "going" + (going.has(e.id) ? " on" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = going.has(e.id);
+    goLabel.append(cb, document.createTextNode(" " + t("going")));
+    const stop = (ev) => ev.stopPropagation();
+    goLabel.addEventListener("click", stop);
+    goLabel.addEventListener("keydown", stop);
+    cb.addEventListener("change", () => {
+      if (cb.checked) going.add(e.id); else going.delete(e.id);
+      saveGoing();
+      goLabel.classList.toggle("on", cb.checked);
+      if (view === "going") render(); // removing from the menu updates the list live
+    });
+    a.querySelector(".body").appendChild(goLabel);
     return a;
   }
 
@@ -296,7 +318,37 @@
     list.appendChild(grid);
   }
 
+  // Render a day-grouped list of events into #list (shared by the feed and the menu).
+  function renderDayGroups(visible) {
+    const list = $("#list");
+    let currentDay = null, grid = null;
+    for (const e of visible) {
+      const k = dayKey(e.starts_at);
+      if (k !== currentDay) {
+        currentDay = k;
+        const { base, rel } = dayLabel(k);
+        const h = document.createElement("div");
+        h.className = "day-head";
+        h.innerHTML = rel ? `${base}<span class="rel">${rel}</span>` : base;
+        list.appendChild(h);
+        grid = document.createElement("div");
+        grid.className = "cards";
+        list.appendChild(grid);
+      }
+      grid.appendChild(card(e));
+    }
+  }
+
   function render() {
+    // "מה כבר בתפריט" tab: just the events the user marked going, by date.
+    if (view === "going") {
+      const list = $("#list");
+      list.innerHTML = "";
+      const mine = events.filter((e) => going.has(e.id)); // events[] is already sorted by date
+      if (!mine.length) { list.innerHTML = `<div class="state">${t("goingEmpty")}</div>`; return; }
+      renderDayGroups(mine);
+      return;
+    }
     if (directoryMode()) return renderDirectory();
     const list = $("#list");
     list.innerHTML = "";
@@ -318,26 +370,10 @@
       list.innerHTML = `<div class="state">${t(configured ? "empty" : "notConfigured")}</div>`;
       return;
     }
-    let currentDay = null, grid = null;
-    for (const e of visible) {
-      const k = dayKey(e.starts_at);
-      if (k !== currentDay) {
-        currentDay = k;
-        const { base, rel } = dayLabel(k);
-        const h = document.createElement("div");
-        h.className = "day-head";
-        h.innerHTML = rel ? `${base}<span class="rel">${rel}</span>` : base;
-        list.appendChild(h);
-        grid = document.createElement("div");
-        grid.className = "cards";
-        list.appendChild(grid);
-      }
-      grid.appendChild(card(e));
-    }
+    renderDayGroups(visible);
   }
 
-  // Small helper: a chip whose "on" state reflects set membership (or "all"
-  // highlighted when the set is empty). Multi-select — clicking toggles.
+  // Small helper: a chip whose "on" state reflects the (single-select) filter.
   function addChip(wrap, label, on, onClick, extraClass) {
     const b = document.createElement("button");
     b.className = "chip" + (on ? " on" : "") + (extraClass ? " " + extraClass : "");
@@ -346,62 +382,75 @@
     wrap.appendChild(b);
   }
 
-  // Place chips cascade from the category filter: hidden when no category is
-  // chosen (too many places to list), shown for the chosen categories only.
+  // The single chosen value of a single-select filter, or null for "all".
+  const only = (set) => [...set][0] ?? null;
+  // A source's city: from the sources table, else inferred from its events.
+  const srcCity = (id) => SOURCES[id]?.city || events.find((e) => e.source_id === id && e.city)?.city || null;
+
+  // Place chips cascade from City + Category: hidden until one of them is chosen
+  // (otherwise there are too many places to list), then show only the matching ones.
   function renderChips() {
     const wrap = $("#sourceChips");
     wrap.innerHTML = "";
-    if (!catSel.size) return;
-    const ids = Object.keys(SOURCES).filter((id) => catSel.has(SOURCES[id].category));
+    const city = only(citySel), cat = only(catSel);
+    if (!city && !cat) return; // nothing to narrow by yet
+    const ids = Object.keys(SOURCES).filter(
+      (id) => (!cat || SOURCES[id].category === cat) && (!city || srcCity(id) === city)
+    );
     if (!ids.length) return;
     addChip(wrap, t("all"), !srcSel.size, () => { srcSel.clear(); renderChips(); render(); });
     for (const id of ids) {
-      addChip(wrap, SOURCES[id][lang], srcSel.has(id), () => { toggle(srcSel, id); renderChips(); render(); });
+      addChip(wrap, SOURCES[id][lang], srcSel.has(id), () => {
+        srcSel.clear(); srcSel.add(id); renderChips(); render(); // single-select
+      });
     }
   }
 
-  // Place-category filter (fringe/club/mainstream/festival) — shown once the
-  // category column exists in the data.
+  // Category filter — single-select with an "All" default.
   function renderCatChips() {
     const wrap = $("#catChips");
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
-    // Single-select: no "all" chip. Clicking a category makes it the only one.
     const CAT_COLOR = { live: "cat-live", exhibitions: "cat-exhibitions", galleries: "cat-galleries", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
+    addChip(wrap, t("all"), !catSel.size, () => {
+      catSel.clear(); srcSel.clear(); renderCatChips(); renderChips(); render();
+    });
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
-        if (catSel.has(c)) return; // already the active category
-        catSel.clear(); catSel.add(c);
-        srcSel.clear(); // place chips belong to the previous category
+        catSel.clear(); catSel.add(c); srcSel.clear(); // place chips belong to the previous category
         renderCatChips(); renderChips(); render();
       }, CAT_COLOR[c] || null);
     }
   }
 
-  // City names are always English (project convention); chips appear only when
-  // events span more than one city.
+  // City filter — single-select with an "All" default; chips appear only when
+  // events span more than one city. City names are English (project convention).
   function renderCityChips() {
     const wrap = $("#cityChips");
     wrap.innerHTML = "";
     const cities = [...new Set(events.map((e) => e.city).filter(Boolean))].sort();
     if (cities.length < 2) return;
-    addChip(wrap, t("all"), !citySel.size, () => { citySel.clear(); renderCityChips(); render(); });
+    addChip(wrap, t("all"), !citySel.size, () => {
+      citySel.clear(); srcSel.clear(); renderCityChips(); renderChips(); render();
+    });
     for (const c of cities) {
-      addChip(wrap, c, citySel.has(c), () => { toggle(citySel, c); renderCityChips(); render(); });
+      addChip(wrap, c, citySel.has(c), () => {
+        citySel.clear(); citySel.add(c); srcSel.clear(); // a place may not exist in the new city
+        renderCityChips(); renderChips(); render();
+      });
     }
   }
 
+  // Date filter — single-select with an "All days" default.
   function renderDateChips() {
     const wrap = $("#dateChips");
     wrap.innerHTML = "";
-    // "all days" is active when nothing is chosen
     addChip(wrap, t("allDays"), !daySel.size && !specificDate, () => {
       daySel.clear(); specificDate = null; renderDateChips(); render();
     });
-    // today / tomorrow / weekend — combinable
     for (const val of ["today", "tomorrow", "weekend"]) {
       addChip(wrap, t(val), daySel.has(val), () => {
-        specificDate = null; toggle(daySel, val); renderDateChips(); render();
+        specificDate = null; daySel.clear(); daySel.add(val); renderDateChips(); render();
       });
     }
     // A clean 📅 chip that opens the native calendar — the bare <input type=date>
@@ -439,6 +488,18 @@
   };
   $("#freeOnly").onchange = (e) => { freeOnly = e.target.checked; render(); };
   $("#search").oninput = (e) => { query = e.target.value; render(); };
+
+  // Tabs: the dashboard feed vs. the "מה כבר בתפריט" going list (filters apply
+  // only to the feed, so hide them on the menu tab).
+  function setView(v) {
+    view = v;
+    $("#tabEvents").classList.toggle("on", v === "events");
+    $("#tabGoing").classList.toggle("on", v === "going");
+    $(".filters").style.display = v === "going" ? "none" : "";
+    render();
+  }
+  $("#tabEvents").onclick = () => setView("events");
+  $("#tabGoing").onclick = () => setView("going");
 
   applyLang();
   renderChips();

@@ -25,6 +25,12 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
 - `scraper/lib/*` — `fetchPage`, `render` (puppeteer), `ai` (Claude), `db`
   (Supabase REST), `util`.
 - `web/` — static page (`app.js`), admin (`admin.html`), status (`status.html`).
+  Public filters are single-select (Date·City·Category·Place, "All" default,
+  cascading); the מה כבר בתפריט tab is a localStorage "going" list.
+- `netlify/functions/` — admin-only, password-gated (ADMIN_PW): `extract-event`
+  (Claude Vision reads a screenshot), `save-event` (hosts the poster in the
+  `event-images` Storage bucket + inserts a manual event via the service key —
+  needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Netlify), `trigger-scrape`.
 - Sources live in the Supabase `sources` table (edit via admin.html);
   `scraper/sources.js` is only a fallback seed.
 

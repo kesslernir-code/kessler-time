@@ -76,12 +76,14 @@
       <div class="field"><label>Description (optional)</label><input id="evDesc" /></div>
       <div class="field"><label>Price (optional)</label><input id="evPrice" /></div>
       <div class="field"><label>Ticket / booking URL (optional)</label><input id="evBooking" /></div>
+      <div class="field"><label>Link — Facebook / Instagram (opens when tapping the picture)</label><input id="evLink" placeholder="https://facebook.com/…  |  https://instagram.com/p/…" /></div>
       <div class="field"><label>Category</label>
         <select id="evCat" style="background:var(--panel-2);border:1px solid #2c3040;color:var(--text);border-radius:8px;padding:9px 12px;font:inherit">
           <option value="fringe">הופעות שוליים</option>
           <option value="live">הופעות חיות</option>
           <option value="bohemia">בוהמיה</option>
           <option value="exhibitions">תערוכות</option>
+          <option value="galleries">גלריות</option>
           <option value="festival">פסטיבלים</option>
           <option value="cinema">קולנועים</option>
           <option value="bars">ברים</option>
@@ -93,7 +95,7 @@
       </div>
       <button class="btn" id="saveEventBtn">Save event</button>
     </div>
-    <button class="btn" id="extractBtn" style="display:none">🔍 Extract details</button>
+    <button class="mini" id="extractBtn" style="display:none">🔍 Re-extract</button>
     <div id="uploadMsg" style="margin-top:10px;font-size:14px;min-height:20px"></div>
   </div>
 
@@ -273,41 +275,52 @@
     // ---- Screenshot upload ------------------------------------------------
     let uploadedImageData = null;
 
+    // Downscale the screenshot so the upload stays small and storage stays light.
+    function resizeDataUrl(dataUrl, max = 1280) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          c.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
+
+    // Selecting a file resizes it, shows a preview, and immediately runs extraction.
     $("#imgFile").onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        uploadedImageData = ev.target.result; // base64 data URL
+      reader.onload = async (ev) => {
+        uploadedImageData = await resizeDataUrl(ev.target.result);
         const preview = $("#imgPreview");
-        preview.src = uploadedImageData;
-        preview.style.display = "block";
-        $("#extractBtn").style.display = "inline-block";
+        preview.src = uploadedImageData; preview.style.display = "block";
         $("#extractedForm").style.display = "none";
-        $("#uploadMsg").textContent = "";
+        runExtract(); // automatic & immediate
       };
       reader.readAsDataURL(file);
     };
 
-    $("#extractBtn").onclick = async () => {
+    async function runExtract() {
       const msg = $("#uploadMsg");
       const pass = $("#fPass").value;
       if (!pass) { msg.textContent = "enter admin password first"; msg.style.color = "#ff7a7a"; return; }
       if (!uploadedImageData) return;
-      $("#extractBtn").disabled = true;
-      $("#extractBtn").textContent = "⏳ Reading…";
-      msg.textContent = "";
+      $("#extractBtn").disabled = true; $("#extractBtn").textContent = "⏳ Reading…";
+      msg.textContent = "🔍 Reading the poster…"; msg.style.color = "var(--muted)";
       try {
         const res = await fetch("/.netlify/functions/extract-event", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ secret: pass, imageData: uploadedImageData }),
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || "extraction failed");
-        const f = data.fields;
-        if (!f.title) { msg.textContent = "no event found in image"; msg.style.color = "#ff7a7a"; return; }
-        // pre-fill form
+        const f = data.fields || {};
         $("#evTitle").value = f.title || "";
         $("#evDate").value = f.date || "";
         $("#evTime").value = f.time || "";
@@ -317,48 +330,53 @@
         $("#evPrice").value = f.price_text || "";
         $("#evBooking").value = f.booking_url || "";
         $("#extractedForm").style.display = "block";
-        msg.textContent = "✓ Details extracted — review and save";
-        msg.style.color = "var(--free)";
+        $("#extractBtn").style.display = "inline-block";
+        msg.textContent = f.title ? "✓ Details read — add the link & category, then Save" : "Couldn't read a date — fill the fields manually";
+        msg.style.color = f.title ? "var(--free)" : "#ffb259";
       } catch (e) {
-        msg.textContent = e.message; msg.style.color = "#ff7a7a";
+        // let the admin save manually even if Vision failed
+        $("#extractedForm").style.display = "block";
+        $("#extractBtn").style.display = "inline-block";
+        msg.textContent = "Extraction error: " + e.message + " — fill the fields manually";
+        msg.style.color = "#ff7a7a";
       } finally {
-        $("#extractBtn").disabled = false;
-        $("#extractBtn").textContent = "🔍 Extract details";
+        $("#extractBtn").disabled = false; $("#extractBtn").textContent = "🔍 Re-extract";
       }
-    };
+    }
+    $("#extractBtn").onclick = runExtract;
 
     $("#saveEventBtn").onclick = async () => {
       const msg = $("#uploadMsg");
       const pass = $("#fPass").value;
       const title = $("#evTitle").value.trim();
       const date = $("#evDate").value.trim();
-      const time = $("#evTime").value.trim() || "20:00";
       if (!title || !date) { msg.textContent = "title and date are required"; msg.style.color = "#ff7a7a"; return; }
-      const startsAt = `${date}T${time}:00+03:00`;
       $("#saveEventBtn").disabled = true;
       try {
-        const out = await rpc("add_manual_event", {
-          secret: pass,
-          p_title: title,
-          p_starts_at: startsAt,
-          p_category: $("#evCat").value,
-          p_venue: $("#evVenue").value.trim(),
-          p_city: $("#evCity").value.trim(),
-          p_description: $("#evDesc").value.trim(),
-          p_price_text: $("#evPrice").value.trim(),
-          p_booking_url: $("#evBooking").value.trim(),
+        const r = await fetch("/.netlify/functions/save-event", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: pass,
+            imageData: uploadedImageData,           // the poster, hosted server-side
+            eventUrl: $("#evLink").value.trim(),    // FB/IG link — opens on tapping the card
+            fields: {
+              title, date, time: $("#evTime").value.trim() || "20:00",
+              venue: $("#evVenue").value.trim(), city: $("#evCity").value.trim(),
+              description: $("#evDesc").value.trim(), price_text: $("#evPrice").value.trim(),
+              booking_url: $("#evBooking").value.trim(), category: $("#evCat").value,
+            },
+          }),
         });
-        if (out === "ok") {
+        const d = await r.json();
+        if (d.ok) {
           msg.textContent = `✓ "${title}" saved — visible on the main page now`;
           msg.style.color = "var(--free)";
           $("#extractedForm").style.display = "none";
           $("#imgPreview").style.display = "none";
-          $("#imgFile").value = "";
-          uploadedImageData = null;
+          $("#imgFile").value = ""; uploadedImageData = null;
           $("#extractBtn").style.display = "none";
         } else {
-          msg.textContent = typeof out === "string" ? out : JSON.stringify(out);
-          msg.style.color = "#ff7a7a";
+          msg.textContent = d.error || "save failed"; msg.style.color = "#ff7a7a";
         }
       } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
       $("#saveEventBtn").disabled = false;
