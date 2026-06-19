@@ -367,8 +367,8 @@
             },
           }),
         });
-        const d = await r.json();
-        if (d.ok) {
+        let d = {}; try { d = await r.json(); } catch {}
+        if (r.ok && d.ok) {
           msg.textContent = `✓ "${title}" saved — visible on the main page now`;
           msg.style.color = "var(--free)";
           $("#extractedForm").style.display = "none";
@@ -376,7 +376,7 @@
           $("#imgFile").value = ""; uploadedImageData = null;
           $("#extractBtn").style.display = "none";
         } else {
-          msg.textContent = d.error || "save failed"; msg.style.color = "#ff7a7a";
+          msg.textContent = "save failed: " + (d.error || d.errorMessage || ("HTTP " + r.status)); msg.style.color = "#ff7a7a";
         }
       } catch (e) { msg.textContent = e.message; msg.style.color = "#ff7a7a"; }
       $("#saveEventBtn").disabled = false;

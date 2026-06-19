@@ -6,6 +6,15 @@
 const BUCKET = "event-images";
 
 export async function handler(event) {
+  try {
+    return await run(event);
+  } catch (e) {
+    console.error("save-event crashed:", e);
+    return resp(500, { error: "save-event crashed: " + (e?.message || String(e)) });
+  }
+}
+
+async function run(event) {
   if (event.httpMethod !== "POST") return resp(405, { error: "method not allowed" });
 
   let body;
