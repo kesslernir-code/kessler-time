@@ -34,12 +34,17 @@ async function run(event) {
   const title = (f.title || "").trim();
   const date = (f.date || "").trim();
   const time = (f.time || "20:00").trim();
-  if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return resp(400, { error: "title and a valid date (YYYY-MM-DD) are required" });
+  const cat = f.category || "other";
+  // Directory places (bars/restaurants/festivals) are info cards — no date needed.
+  const DIRECTORY = new Set(["bars", "restaurants", "festival"]);
+  const hasDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  if (!title) return resp(400, { error: "a title is required" });
+  if (!hasDate && !DIRECTORY.has(cat)) return resp(400, { error: "a valid date (YYYY-MM-DD) is required" });
 
   // deterministic id so re-saving the same event updates it
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
-  const id = `manual-${slug}-${date}`.slice(0, 120);
-  const startsAt = `${date}T${time}:00+03:00`;
+  const id = `manual-${slug}${hasDate ? "-" + date : ""}`.slice(0, 120);
+  const startsAt = hasDate ? `${date}T${time}:00+03:00` : null;
 
   // 1. host the uploaded poster (data URL) in Storage
   let imageUrl = null;
@@ -63,7 +68,7 @@ async function run(event) {
   const row = {
     id, source_id: "manual", title,
     starts_at: startsAt,
-    category: f.category || "other",
+    category: cat,
     venue: (f.venue || "").trim() || null,
     city: (f.city || "").trim() || null,
     description: (f.description || "").trim() || null,

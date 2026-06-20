@@ -25,11 +25,11 @@
       tabEvents: "אירועים",
       tabGoing: "מה כבר בתפריט",
       going: "🎟 הולכים",
+      share: "↗ שיתוף",
       goingEmpty: "עדיין אין אירועים בתפריט — סמנו “הולכים” על אירוע",
       cat_fringe: "הופעות שוליים",
       cat_live: "הופעות חיות",
       cat_bohemia: "בוהמיה",
-      cat_exhibitions: "תערוכות",
       cat_galleries: "גלריות",
       cat_festival: "פסטיבלים",
       cat_cinema: "קולנועים",
@@ -60,11 +60,11 @@
       tabEvents: "Events",
       tabGoing: "On my menu",
       going: "🎟 Going",
+      share: "↗ Share",
       goingEmpty: "Nothing on your menu yet — tap “Going” on an event",
       cat_fringe: "Fringe",
       cat_live: "Live shows",
       cat_bohemia: "Bohemia",
-      cat_exhibitions: "Exhibitions",
       cat_galleries: "Galleries",
       cat_festival: "Festivals",
       cat_cinema: "Cinemas",
@@ -137,7 +137,7 @@
       }
     } catch {} // a failed write keeps the optimistic local state; re-syncs on next load
   }
-  const CATEGORIES = ["fringe", "live", "bohemia", "exhibitions", "galleries", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
+  const CATEGORIES = ["fringe", "live", "bohemia", "galleries", "club", "cinema", "festival", "bars", "restaurants", "secret", "other"];
   // shown as info-card listings, not event feeds
   const DIRECTORY_CATS = new Set(["bars", "restaurants", "festival"]);
 
@@ -199,7 +199,8 @@
     // hasn't ended yet — so a currently-running exhibition stays visible.
     const url = (extra) =>
       `${CFG.SUPABASE_URL}/rest/v1/events?select=${cols}${extra}` +
-      `&or=(starts_at.gte.${s},ends_at.gte.${s})&order=starts_at.asc&limit=600`;
+      // upcoming, still-running (exhibitions), or dateless (bars/restaurants info cards)
+      `&or=(starts_at.gte.${s},ends_at.gte.${s},starts_at.is.null)&order=starts_at.asc&limit=600`;
     try {
       // ",category" gracefully degrades while the DB column doesn't exist yet
       let res = await fetch(url(",category"), { headers: { apikey: CFG.SUPABASE_ANON_KEY } });
@@ -270,21 +271,48 @@
     else desc.remove();
     // ticket button is a link of its own — don't trigger the card's link
     a.querySelector(".tix")?.addEventListener("click", (ev) => ev.stopPropagation());
-    // "going" toggle — adds/removes the event from the מה כבר בתפריט tab (local only)
+    const stop = (ev) => ev.stopPropagation();
+    // "going" toggle — adds/removes the event from the מה כבר בתפריט tab (shared list)
     const goLabel = document.createElement("label");
     goLabel.className = "going" + (going.has(e.id) ? " on" : "");
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = going.has(e.id);
     goLabel.append(cb, document.createTextNode(" " + t("going")));
-    const stop = (ev) => ev.stopPropagation();
     goLabel.addEventListener("click", stop);
     goLabel.addEventListener("keydown", stop);
     cb.addEventListener("change", () => {
       goLabel.classList.toggle("on", cb.checked);
       markGoing(e.id, cb.checked); // updates the shared DB list + re-renders the menu
     });
-    a.querySelector(".body").appendChild(goLabel);
+
+    // Share to WhatsApp — pick Nir or Sharon
+    const when = e.starts_at
+      ? " — " + new Date(e.starts_at).toLocaleString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" })
+      : "";
+    const link = pageUrl && pageUrl !== "#" ? "\n" + pageUrl : "";
+    const shareText = encodeURIComponent(`${e.title}${when}${link}`);
+    const share = document.createElement("div");
+    share.className = "share";
+    const shareBtn = document.createElement("button");
+    shareBtn.type = "button"; shareBtn.className = "share-btn"; shareBtn.textContent = t("share");
+    const menu = document.createElement("div");
+    menu.className = "share-menu";
+    for (const c of [{ n: "ניר", p: "972523867417" }, { n: "שרון", p: "972544548395" }]) {
+      const to = document.createElement("a");
+      to.className = "share-to";
+      to.href = `https://wa.me/${c.p}?text=${shareText}`;
+      to.target = "_blank"; to.rel = "noopener"; to.textContent = c.n;
+      to.addEventListener("click", stop);
+      menu.appendChild(to);
+    }
+    shareBtn.addEventListener("click", (ev) => { stop(ev); share.classList.toggle("open"); });
+    share.append(shareBtn, menu);
+
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+    actions.append(goLabel, share);
+    a.querySelector(".body").appendChild(actions);
     return a;
   }
 
@@ -338,15 +366,26 @@
     const list = $("#list");
     list.innerHTML = "";
     const q = query.trim().toLowerCase();
-    const ids = Object.keys(SOURCES).filter(
-      (id) => catSel.has(SOURCES[id].category) &&
-        (!srcSel.size || srcSel.has(id)) &&
-        (!q || ((SOURCES[id].he + " " + SOURCES[id].en + " " + (SOURCES[id].description || "")).toLowerCase().includes(q)))
-    );
-    if (!ids.length) { list.innerHTML = `<div class="state">${t("empty")}</div>`; return; }
     const grid = document.createElement("div");
     grid.className = "cards";
-    ids.forEach((id) => grid.appendChild(placeCard(id, SOURCES[id])));
+    let n = 0;
+    // venues that are followed sites (from the sources table)
+    Object.keys(SOURCES)
+      .filter((id) => catSel.has(SOURCES[id].category) &&
+        (!srcSel.size || srcSel.has(id)) &&
+        (!citySel.size || srcCity(id) === only(citySel)) &&
+        (!q || (SOURCES[id].he + " " + SOURCES[id].en + " " + (SOURCES[id].description || "")).toLowerCase().includes(q)))
+      .forEach((id) => { grid.appendChild(placeCard(id, SOURCES[id])); n++; });
+    // places added manually via the screenshot uploader (bars/restaurants, no date)
+    events
+      .filter((e) => catSel.has(e.category) && e.source_id === "manual" &&
+        (!citySel.size || citySel.has(e.city)) &&
+        (!q || (e.title + " " + (e.description || "")).toLowerCase().includes(q)))
+      .forEach((e) => {
+        grid.appendChild(placeCard(e.id, { he: e.title, en: e.title, url: e.event_url || e.booking_url, image: e.image_url, description: e.description }));
+        n++;
+      });
+    if (!n) { list.innerHTML = `<div class="state">${t("empty")}</div>`; return; }
     list.appendChild(grid);
   }
 
@@ -443,7 +482,7 @@
     const wrap = $("#catChips");
     wrap.innerHTML = "";
     if (!events.some((e) => "category" in e)) return;
-    const CAT_COLOR = { live: "cat-live", exhibitions: "cat-exhibitions", galleries: "cat-galleries", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
+    const CAT_COLOR = { live: "cat-live", galleries: "cat-galleries", festival: "cat-festival", cinema: "cat-cinema", bars: "cat-bars", restaurants: "cat-restaurants", club: "cat-club" };
     addChip(wrap, t("all"), !catSel.size, () => {
       catSel.clear(); srcSel.clear(); renderCatChips(); renderChips(); render();
     });
@@ -480,7 +519,7 @@
     addChip(wrap, t("allDays"), !daySel.size && !specificDate, () => {
       daySel.clear(); specificDate = null; renderDateChips(); render();
     });
-    for (const val of ["today", "tomorrow", "weekend"]) {
+    for (const val of ["today", "weekend"]) {
       addChip(wrap, t(val), daySel.has(val), () => {
         specificDate = null; daySel.clear(); daySel.add(val); renderDateChips(); render();
       });
@@ -532,6 +571,9 @@
   }
   $("#tabEvents").onclick = () => setView("events");
   $("#tabGoing").onclick = () => setView("going");
+
+  // Close any open share menu when clicking elsewhere (share buttons stopPropagation).
+  document.addEventListener("click", () => document.querySelectorAll(".share.open").forEach((s) => s.classList.remove("open")));
 
   applyLang();
   renderChips();

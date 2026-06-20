@@ -60,13 +60,34 @@ body {
 .tab:hover { color: var(--text); }
 .tab.on { color: var(--text); border-bottom-color: var(--accent); }
 
-/* "Going" toggle on each card */
+/* Card actions row: going toggle + share */
+.card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .going {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; color: var(--muted); cursor: pointer; user-select: none;
 }
 .going input { accent-color: var(--accent); cursor: pointer; }
 .going.on { color: var(--accent); font-weight: 600; }
+
+/* Share-to-WhatsApp control */
+.share { position: relative; }
+.share-btn {
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 13px; padding: 2px 4px;
+}
+.share-btn:hover { color: var(--text); }
+.share-menu {
+  display: none; position: absolute; bottom: 100%; inset-inline-end: 0; margin-bottom: 6px;
+  background: var(--panel-2); border: 1px solid #2c3040; border-radius: 8px;
+  padding: 4px; gap: 2px; flex-direction: column; z-index: 20; min-width: 96px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.share.open .share-menu { display: flex; }
+.share-to {
+  display: block; padding: 7px 12px; border-radius: 6px; color: var(--text);
+  text-decoration: none; font-size: 13.5px; white-space: nowrap;
+}
+.share-to:hover { background: var(--panel); color: #25d366; }
 
 .filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
