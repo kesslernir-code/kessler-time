@@ -81,6 +81,17 @@ export async function deleteEventById(id) {
   await rest(`events?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
 }
 
+/** Refresh last_seen_at for events we know are still listed but skip re-scraping
+ *  (listing-detail-ai), so the stale-prune doesn't delete them. */
+export async function touchEvents(ids) {
+  if (!dbConfigured() || !ids.length) return;
+  const now = new Date().toISOString();
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50).map(encodeURIComponent).join(",");
+    await rest(`events?id=in.(${chunk})`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ last_seen_at: now }) });
+  }
+}
+
 /** Patch a source row (e.g. directory info: image/description/phone). */
 export async function updateSourceRow(id, patch) {
   if (!dbConfigured() || !Object.keys(patch).length) return;

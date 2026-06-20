@@ -6,7 +6,7 @@
 import { fetchText } from "../lib/fetchPage.js";
 import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
-import { knownEventUrls } from "../lib/db.js";
+import { knownEventUrls, touchEvents } from "../lib/db.js";
 
 export const name = "listing-detail-ai";
 
@@ -72,6 +72,11 @@ export async function scrape(source, log = console.error) {
 
   const known = await knownEventUrls(source.id);
   const fresh = [...found].filter(([url]) => !known.has(url));
+  // Events we already have but are still on the listing: refresh their last_seen_at
+  // so the stale-prune keeps them. (We skip re-fetching/AI for them to save cost,
+  // but they must not be treated as gone.)
+  const stillListed = [...found.keys()].map((u) => known.get(u)).filter(Boolean);
+  await touchEvents(stillListed);
   if (!fresh.length) return [];
   if (!aiConfigured()) throw new Error("ANTHROPIC_API_KEY missing — this source needs AI extraction");
 
