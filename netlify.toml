@@ -1,6 +1,13 @@
 [build]
   publish = "web"
 
+# The Supabase URL + anon key are public by design (baked into web/config.js so
+# the static page can read Supabase under SELECT-only RLS). Tell Netlify's secret
+# scanner not to treat them as leaked secrets — the real secrets
+# (SERVICE_ROLE_KEY, ANTHROPIC_API_KEY) live only in env vars, never in the repo.
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
