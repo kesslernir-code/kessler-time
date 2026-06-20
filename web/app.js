@@ -238,18 +238,14 @@
   const hue = (s) => PALETTE[[...s].reduce((a, c) => a + c.codePointAt(0), 0) % PALETTE.length];
   const phHTML = (title) => `<div class="ph" style="background:${hue(title || "?")}33">${(title || "?")[0]}</div>`;
 
-  // An <img> that tries the wsrv proxy first, then the source URL directly (some
-  // venues — e.g. levontin7 — are too slow for the proxy but load fine direct),
-  // then falls back to a coloured letter placeholder.
+  // An <img> via the wsrv proxy, falling back to a coloured letter placeholder.
+  // (Images that the proxy can't fetch — hotlink-blocked venues like levontin7 —
+  // are re-hosted into our own Storage by the QC agent, so they load normally.)
   function smartImg(url, title) {
     const im = document.createElement("img");
     im.loading = "lazy"; im.alt = "";
     im.src = proxyImg(url);
-    let stage = 0;
-    im.onerror = () => {
-      if (stage === 0) { stage = 1; im.src = url; }        // proxy failed → load directly
-      else { im.replaceWith(...new DOMParser().parseFromString(phHTML(title), "text/html").body.childNodes); }
-    };
+    im.onerror = () => im.replaceWith(...new DOMParser().parseFromString(phHTML(title), "text/html").body.childNodes);
     return im;
   }
 

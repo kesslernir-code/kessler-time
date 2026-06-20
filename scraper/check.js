@@ -12,43 +12,56 @@
 //   3. QC GATE: per-source image coverage with pass/warn/fail markers, so a
 //      regression surfaces loudly instead of shipping placeholders silently.
 // Usage: node scraper/check.js
-import { dbConfigured, upcomingEvents, updateEvent, logRun } from "./lib/db.js";
+import { dbConfigured, upcomingEvents, updateEvent, deleteEventById, logRun } from "./lib/db.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 import { renderPage, closeBrowser } from "./lib/render.js";
-import { isJunkImageUrl } from "./lib/util.js";
+import { isJunkImageUrl, titlesSimilar } from "./lib/util.js";
+import { rehostImage, ensureBucket, isRehosted } from "./lib/storage.js";
 
 if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(0); }
 
-const events = await upcomingEvents();
+let events = await upcomingEvents();
 
 // The page renders posters through wsrv.nl; if the proxy can't fetch the URL the
 // visitor sees a broken-image placeholder. Verify the URL really resolves to an image.
 const proxy = (u) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=320&h=320&fit=cover&output=webp`;
 const isImg = (r) => r.ok && (r.headers.get("content-type") || "").startsWith("image/");
 async function imageLoads(u) {
-  // First the wsrv proxy (how the page normally renders posters). Two attempts —
-  // a transient hiccup must not wipe a valid poster.
+  // The page renders posters through the proxy, so that's the real test. Two
+  // attempts — a transient hiccup must not wipe a valid poster.
   for (let i = 0; i < 2; i++) {
-    try { if (isImg(await fetch(proxy(u), { method: "GET", signal: AbortSignal.timeout(20000) }))) return true; break; }
-    catch { /* network error — retry once */ }
+    try { if (isImg(await fetch(proxy(u), { method: "GET", signal: AbortSignal.timeout(20000) }))) return true; }
+    catch { /* network error — retry */ }
   }
-  // Fallback: the source URL directly. Some venues (e.g. levontin7) are too slow
-  // for the proxy but load fine in the browser, which falls back to direct too.
-  try { return isImg(await fetch(u, { method: "GET", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) })); }
-  catch { return false; }
+  return false;
 }
 async function mapLimit(items, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) await fn(items[i++]); }));
 }
 
-// 0. DROP junk image_urls (no network), then validate the rest actually load.
-let junked = 0, broke = 0;
+// 0. DROP junk image_urls (no network); validate the rest load through the proxy;
+//    for ones that don't (hotlink-blocked / proxy-blocked venues like levontin7),
+//    re-host the real image into our Storage and use that instead of nulling.
+await ensureBucket();
+let junked = 0, broke = 0, rehosted = 0;
 for (const e of events) {
   if (e.image_url && isJunkImageUrl(e.image_url)) { await updateEvent(e.id, { image_url: null }); e.image_url = null; junked++; }
 }
-await mapLimit(events.filter((e) => e.image_url), 8, async (e) => {
-  if (!(await imageLoads(e.image_url))) { await updateEvent(e.id, { image_url: null }); e.image_url = null; broke++; }
+// Hosts that block the proxy/hotlinking unreliably — always serve our own copy
+// rather than trusting a flaky proxy check that the browser might fail later.
+const REHOST_HOSTS = /levontin7\.com/i;
+await mapLimit(events.filter((e) => e.image_url), 6, async (e) => {
+  if (REHOST_HOSTS.test(e.image_url) && !isRehosted(e.image_url)) {
+    const hosted = await rehostImage(e.image_url, e.id);
+    if (hosted) { await updateEvent(e.id, { image_url: hosted }); e.image_url = hosted; rehosted++; return; }
+  }
+  if (await imageLoads(e.image_url)) return; // renders fine through the proxy
+  if (!isRehosted(e.image_url)) {
+    const hosted = await rehostImage(e.image_url, e.id); // server-side fetch dodges hotlink blocks
+    if (hosted && (await imageLoads(hosted))) { await updateEvent(e.id, { image_url: hosted }); e.image_url = hosted; rehosted++; return; }
+  }
+  await updateEvent(e.id, { image_url: null }); e.image_url = null; broke++;
 });
 
 // URLs shared by 3+ events are listing/home pages, not individual event pages —
@@ -86,6 +99,29 @@ for (const e of needRender) {
 await closeBrowser();
 const fixed = fixedOg + fixedRender;
 
+// 1.5 DEDUP — collapse near-duplicate events (same source, same day, similar
+// title) that accumulate across runs when a venue lists an event under slightly
+// varying titles. Keep the most complete; delete the rest.
+const completeness = (e) => (e.image_url ? 2 : 0) + (e.description ? 1 : 0) + (e.booking_url ? 1 : 0) + (e.price_text ? 1 : 0);
+const dayOf = (iso) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(iso)); } catch { return ""; } };
+const groups = new Map(); // "source|day" -> events[]
+for (const e of events) { if (!e.starts_at) continue; const k = e.source_id + "|" + dayOf(e.starts_at); (groups.get(k) || groups.set(k, []).get(k)).push(e); }
+const removed = new Set();
+let deduped = 0;
+for (const arr of groups.values()) {
+  for (let i = 0; i < arr.length; i++) {
+    if (removed.has(arr[i].id)) continue;
+    for (let j = i + 1; j < arr.length; j++) {
+      if (removed.has(arr[j].id)) continue;
+      if (!titlesSimilar(arr[i].title, arr[j].title)) continue;
+      const drop = completeness(arr[i]) >= completeness(arr[j]) ? arr[j] : arr[i];
+      await deleteEventById(drop.id); removed.add(drop.id); deduped++;
+      if (drop.id === arr[i].id) break; // current i removed → advance outer loop
+    }
+  }
+}
+if (removed.size) events = events.filter((e) => !removed.has(e.id));
+
 // 2. AUDIT
 const isBad = (e) => !e.starts_at || Number.isNaN(Date.parse(e.starts_at));
 const noImg = events.filter((e) => !e.image_url);
@@ -116,8 +152,8 @@ const warns = qc.filter((q) => q.mark === "warn");
 // REPORT
 console.log(`\n=== HEALTH CHECK ===`);
 console.log(`upcoming events: ${events.length}`);
-console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render)`);
-console.log(`missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
+console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${rehosted} re-hosted)`);
+console.log(`deduped: ${deduped} | missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
 console.log(`per source (events · image · desc · link):`);
 for (const [k, s] of Object.entries(bySrc).sort()) {
   const cov = s.n ? s.img / s.n : 1;
@@ -134,6 +170,6 @@ if (warns.length) {
 }
 if (noImg.length) { console.log(`\nmissing image (first 40):`); noImg.slice(0, 40).forEach((e) => console.log(`  [${e.source_id}] ${(e.title || "").slice(0, 45)}`)); }
 
-const summary = `${events.length} events · ${noImg.length} no-image · ${junked + broke} bad-img-dropped · ${fails.length} src FAIL · ${warns.length} src WARN · rescued ${fixed}`;
+const summary = `${events.length} events · ${noImg.length} no-image · ${junked + broke} bad-img-dropped · ${rehosted} re-hosted · ${deduped} deduped · ${fails.length} src FAIL · ${warns.length} src WARN · rescued ${fixed}`;
 await logRun({ source_id: "health-check", strategy: "check", events_found: events.length, events_upserted: events.length - noImg.length, ok: fails.length === 0, duration_ms: 0, error: summary });
 console.log(`\n${fails.length === 0 ? "✓ QC pass (no source below 50% images)" : `✗ QC: ${fails.length} source(s) below 50% images`}`);

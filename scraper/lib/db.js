@@ -76,6 +76,11 @@ export async function updateEvent(id, patch) {
   });
 }
 
+/** Delete one event by id (used by the QC dedup pass). */
+export async function deleteEventById(id) {
+  await rest(`events?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+}
+
 /** Patch a source row (e.g. directory info: image/description/phone). */
 export async function updateSourceRow(id, patch) {
   if (!dbConfigured() || !Object.keys(patch).length) return;
