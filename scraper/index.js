@@ -44,6 +44,7 @@ import * as amphitlv from "./strategies/amphitlv.js";
 import * as cinema from "./strategies/cinema.js";
 import * as epgb from "./strategies/epgb.js";
 import * as tribeEvents from "./strategies/tribeEvents.js";
+import * as smarticket from "./strategies/smarticket.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -58,6 +59,7 @@ const strategies = {
   [cinema.name]: cinema,
   [epgb.name]: epgb,
   [tribeEvents.name]: tribeEvents,
+  [smarticket.name]: smarticket,
 };
 
 const args = process.argv.slice(2);
