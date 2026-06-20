@@ -24,16 +24,18 @@ const events = await upcomingEvents();
 // The page renders posters through wsrv.nl; if the proxy can't fetch the URL the
 // visitor sees a broken-image placeholder. Verify the URL really resolves to an image.
 const proxy = (u) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=320&h=320&fit=cover&output=webp`;
+const isImg = (r) => r.ok && (r.headers.get("content-type") || "").startsWith("image/");
 async function imageLoads(u) {
-  // Two attempts — a transient proxy hiccup must not wipe a valid poster.
+  // First the wsrv proxy (how the page normally renders posters). Two attempts —
+  // a transient hiccup must not wipe a valid poster.
   for (let i = 0; i < 2; i++) {
-    try {
-      const r = await fetch(proxy(u), { method: "GET", signal: AbortSignal.timeout(20000) });
-      if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) return true;
-      if (r.status >= 400 && r.status < 500) return false; // 404/403 won't fix on retry
-    } catch { /* network error — retry once */ }
+    try { if (isImg(await fetch(proxy(u), { method: "GET", signal: AbortSignal.timeout(20000) }))) return true; break; }
+    catch { /* network error — retry once */ }
   }
-  return false;
+  // Fallback: the source URL directly. Some venues (e.g. levontin7) are too slow
+  // for the proxy but load fine in the browser, which falls back to direct too.
+  try { return isImg(await fetch(u, { method: "GET", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) })); }
+  catch { return false; }
 }
 async function mapLimit(items, n, fn) {
   let i = 0;

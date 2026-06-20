@@ -236,6 +236,22 @@
 
   const PALETTE = ["#7aa2ff", "#ff8f6b", "#5ad58a", "#d98cff", "#ffcf5c", "#6be0e0"];
   const hue = (s) => PALETTE[[...s].reduce((a, c) => a + c.codePointAt(0), 0) % PALETTE.length];
+  const phHTML = (title) => `<div class="ph" style="background:${hue(title || "?")}33">${(title || "?")[0]}</div>`;
+
+  // An <img> that tries the wsrv proxy first, then the source URL directly (some
+  // venues — e.g. levontin7 — are too slow for the proxy but load fine direct),
+  // then falls back to a coloured letter placeholder.
+  function smartImg(url, title) {
+    const im = document.createElement("img");
+    im.loading = "lazy"; im.alt = "";
+    im.src = proxyImg(url);
+    let stage = 0;
+    im.onerror = () => {
+      if (stage === 0) { stage = 1; im.src = url; }        // proxy failed → load directly
+      else { im.replaceWith(...new DOMParser().parseFromString(phHTML(title), "text/html").body.childNodes); }
+    };
+    return im;
+  }
 
   function card(e) {
     // Card click -> the event's own page; a separate 🎟 button -> the payment page.
@@ -249,22 +265,21 @@
     const open = () => window.open(pageUrl, "_blank", "noopener");
     a.addEventListener("click", open);
     a.addEventListener("keydown", (ev) => { if (ev.key === "Enter") open(); });
-    const img = e.image_url
-      ? `<img loading="lazy" src="${proxyImg(e.image_url)}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(e.title)}33>${(e.title || "?")[0]}</div>'">`
-      : `<div class="ph" style="background:${hue(e.title)}33">${(e.title || "?")[0]}</div>`;
     const freeBadge = e.is_free ? `<span class="badge free">${t("free")}</span>` : "";
     const priceTxt = e.is_free ? `<span class="price free">${t("free")}</span>` : e.price_text ? `<span class="price">${e.price_text}</span>` : "<span></span>";
     const tixBtn = ticketUrl ? `<a class="tix" href="${ticketUrl}" target="_blank" rel="noopener">🎟 ${t("tickets")}</a>` : "";
     const price = `<div class="price-row">${priceTxt}${tixBtn}</div>`;
     const src = SOURCES[e.source_id]?.[lang] || e.venue || e.source_id;
     a.innerHTML = `
-      <div class="img">${img}<span class="badge">${timeOf(e.starts_at)}</span>${freeBadge}</div>
+      <div class="img"><span class="badge">${timeOf(e.starts_at)}</span>${freeBadge}</div>
       <div class="body">
         <h3></h3>
         <div class="meta"><span class="venue">${src}</span>${e.city ? `<span>${e.city}</span>` : ""}</div>
         <p class="desc"></p>
         ${price}
       </div>`;
+    const imgBox = a.querySelector(".img");
+    imgBox.insertAdjacentElement("afterbegin", e.image_url ? smartImg(e.image_url, e.title) : new DOMParser().parseFromString(phHTML(e.title), "text/html").body.firstChild);
     a.querySelector("h3").textContent = e.title;
     const desc = a.querySelector(".desc");
     if (e.description) desc.textContent = e.description;
@@ -342,17 +357,15 @@
     a.className = "card place-card";
     a.href = s.url || "#"; a.target = "_blank"; a.rel = "noopener";
     const name = s[lang] || s.he || id;
-    const img = s.image
-      ? `<img loading="lazy" src="${proxyImg(s.image)}" alt="" onerror="this.parentNode.innerHTML='<div class=ph style=background:${hue(name)}33>${name[0]}</div>'">`
-      : `<div class="ph" style="background:${hue(name)}33">${name[0]}</div>`;
     a.innerHTML = `
-      <div class="img">${img}</div>
+      <div class="img"></div>
       <div class="body">
         <h3></h3>
         ${s.phone ? `<a class="phone" href="tel:${s.phone.replace(/[^+0-9]/g, "")}">📞 ${s.phone}</a>` : ""}
         <p class="desc"></p>
         <span class="price" style="color:var(--accent-2)">${lang === "he" ? "לאתר ↗" : "Visit ↗"}</span>
       </div>`;
+    a.querySelector(".img").insertAdjacentElement("afterbegin", s.image ? smartImg(s.image, name) : new DOMParser().parseFromString(phHTML(name), "text/html").body.firstChild);
     a.querySelector("h3").textContent = name;
     const d = a.querySelector(".desc"); if (s.description) d.textContent = s.description; else d.remove();
     a.querySelector(".phone")?.addEventListener("click", (ev) => ev.stopPropagation());
