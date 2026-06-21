@@ -43,20 +43,35 @@ async function askVision(content, maxTokens = 4000) {
  */
 export async function extractEventsFromImages(imageUrls, { sourceName, todayISO }) {
   if (!imageUrls.length) return [];
+  // Download each poster server-side and send it as base64 — sending a URL fails
+  // for venues whose servers block Anthropic's image fetcher (hotlink protection).
+  const OK_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+  const fetched = [];
+  for (const url of imageUrls) {
+    try {
+      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; kessler-time/1.0)" }, signal: AbortSignal.timeout(15000) });
+      const mediaType = (r.headers.get("content-type") || "").split(";")[0].trim();
+      if (!r.ok || !OK_TYPES.has(mediaType)) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 2000 || buf.length > 4_500_000) continue; // skip tiny errors / oversized
+      fetched.push({ url, mediaType, data: buf.toString("base64") });
+    } catch { /* skip unreachable images */ }
+  }
+  if (!fetched.length) return [];
   const content = [{
     type: "text",
     text: `Today is ${todayISO} (Israel). The following are event POSTER images from "${sourceName}" (mostly Hebrew). Read each poster and extract the event it advertises. Return ONLY a JSON array, one object per image by its index:
 [{"i":0,"is_event":true/false,"title":"...","date":"YYYY-MM-DD" or null,"time":"HH:MM" or null,"where":"..." or null,"price_text":"..." or null,"is_free":true/false/null}]
 Set is_event=false for logos, decorations, or images that are not a specific event with a real future date.`,
   }];
-  imageUrls.forEach((url, i) => {
+  fetched.forEach((f, i) => {
     content.push({ type: "text", text: `IMAGE ${i}:` });
-    content.push({ type: "image", source: { type: "url", url } });
+    content.push({ type: "image", source: { type: "base64", media_type: f.mediaType, data: f.data } });
   });
   const out = parseJsonArray(await askVision(content, 6000));
   return out
-    .filter((o) => o.is_event && /^\d{4}-\d{2}-\d{2}$/.test(o.date || "") && imageUrls[o.i])
-    .map((o) => ({ ...o, imageUrl: imageUrls[o.i] }));
+    .filter((o) => o.is_event && /^\d{4}-\d{2}-\d{2}$/.test(o.date || "") && fetched[o.i])
+    .map((o) => ({ ...o, imageUrl: fetched[o.i].url }));
 }
 
 function parseJsonArray(text) {

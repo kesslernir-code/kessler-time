@@ -6,8 +6,9 @@
 //   1. ESCALATION ladder to rescue missing images, per event:
 //        a. og:image / twitter:image / first content <img> from the event page
 //        b. if that page is the event's OWN page, render it and grab the poster
-//      (events whose only link is the source homepage are skipped — there is no
-//       per-event image to find, and the shared banner is rejected upstream.)
+//        c. VISION — events sharing one listing page (no individual page): render
+//           the listing, read its posters with Claude vision, match to events.
+//      Images the proxy can't fetch (hotlink-blocked venues) are re-hosted to Storage.
 //   2. AUDIT every upcoming event for completeness (image / date / link / desc).
 //   3. QC GATE: per-source image coverage with pass/warn/fail markers, so a
 //      regression surfaces loudly instead of shipping placeholders silently.
@@ -15,8 +16,9 @@
 import { dbConfigured, upcomingEvents, updateEvent, deleteEventById, logRun } from "./lib/db.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 import { renderPage, closeBrowser } from "./lib/render.js";
-import { isJunkImageUrl, titlesSimilar } from "./lib/util.js";
+import { isJunkImageUrl, titlesSimilar, todayISODate } from "./lib/util.js";
 import { rehostImage, ensureBucket, isRehosted } from "./lib/storage.js";
+import { extractEventsFromImages, aiConfigured } from "./lib/ai.js";
 
 if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(0); }
 
@@ -96,8 +98,38 @@ for (const e of needRender) {
   const img = await renderPoster(e.event_url);
   if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedRender++; }
 }
+
+// Rung c: VISION — events that all share one listing page (no individual page to
+// scrape, so rungs a/b can't help) are rescued by rendering that listing, reading
+// the posters with Claude vision, and matching each poster to its event by title.
+// Capped hard (vision is the costly rung): a few listings, ~12 posters each.
+let fixedVision = 0;
+if (aiConfigured()) {
+  const byUrl = new Map();
+  for (const e of events) {
+    if (e.image_url || !e.event_url || isIndividual(e.event_url)) continue;
+    (byUrl.get(e.event_url) || byUrl.set(e.event_url, []).get(e.event_url)).push(e);
+  }
+  let triedVision = 0;
+  for (const [url, evs] of byUrl) {
+    if (triedVision >= 3) break;     // at most 3 listings per run
+    if (evs.length < 2) continue;    // only worth it for a real list of events
+    triedVision++;
+    let posters = [];
+    try { posters = (await renderPage(url, { timeoutMs: 45000, scroll: true })).images.slice(0, 12); } catch { continue; }
+    if (!posters.length) continue;
+    let read = [];
+    try { read = await extractEventsFromImages(posters, { sourceName: evs[0].venue || evs[0].source_id, todayISO: todayISODate() }); } catch { continue; }
+    for (const e of evs) {
+      const m = read.find((r) => r.imageUrl && titlesSimilar(r.title || "", e.title));
+      if (!m) continue;
+      let img = (await imageLoads(m.imageUrl)) ? m.imageUrl : await rehostImage(m.imageUrl, e.id);
+      if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedVision++; }
+    }
+  }
+}
 await closeBrowser();
-const fixed = fixedOg + fixedRender;
+const fixed = fixedOg + fixedRender + fixedVision;
 
 // 1.5 DEDUP — collapse near-duplicate events (same source, same day, similar
 // title) that accumulate across runs when a venue lists an event under slightly
@@ -152,7 +184,7 @@ const warns = qc.filter((q) => q.mark === "warn");
 // REPORT
 console.log(`\n=== HEALTH CHECK ===`);
 console.log(`upcoming events: ${events.length}`);
-console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${rehosted} re-hosted)`);
+console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${fixedVision} vision + ${rehosted} re-hosted)`);
 console.log(`deduped: ${deduped} | missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
 console.log(`per source (events · image · desc · link):`);
 for (const [k, s] of Object.entries(bySrc).sort()) {
