@@ -4,7 +4,7 @@
 // each NEW event's detail page is fetched once and a single batched Claude
 // call extracts time / price / ticket link from its focused text.
 import { fetchText } from "../lib/fetchPage.js";
-import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink } from "../lib/util.js";
+import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink, isJunkImageUrl } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
 import { knownEventUrls, touchEvents } from "../lib/db.js";
 
@@ -89,8 +89,9 @@ export async function scrape(source, log = console.error) {
       const title = decodeEntities(html.match(/<title>([^<]+)<\/title>/)?.[1] || "")
         .split(/[–|]/)[0]
         .trim();
+      const ogImg = (html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)/i) || [])[1] || null;
       details.push({
-        url, sd, html, title, listImg,
+        url, sd, html, title, listImg, ogImg,
         ld: jsonLdEvent(html),
         text: stripHtml(html).slice(0, 1400),
         detailImgs: [...html.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u)),
@@ -102,12 +103,15 @@ export async function scrape(source, log = console.error) {
   }
 
   // An image appearing on many detail pages is site template (logo, sponsors) —
-  // never an event poster. The listing's per-event poster always wins; the
-  // page's JSON-LD image is the last resort (Wix pages have no <img> in static HTML).
+  // never an event poster. The listing's per-event poster wins; then the page's
+  // own og:image / JSON-LD image (reliable, single per page); then a content <img>.
   const freq = new Map();
   for (const d of details) for (const u of new Set(d.detailImgs)) freq.set(u, (freq.get(u) || 0) + 1);
   const isCommon = (u) => details.length >= 3 && (freq.get(u) || 0) > details.length * 0.4;
-  for (const d of details) d.image = d.listImg || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
+  const ogShared = new Map(); // an og:image repeated across pages is a site banner, not a poster
+  for (const d of details) if (d.ogImg) ogShared.set(d.ogImg, (ogShared.get(d.ogImg) || 0) + 1);
+  const ogOk = (u) => u && !isJunkImageUrl(u) && !IMG_BLACKLIST.test(u) && !(details.length >= 3 && (ogShared.get(u) || 0) > details.length * 0.4);
+  for (const d of details) d.image = d.listImg || (ogOk(d.ogImg) ? d.ogImg : null) || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
 
   // Detail pages with a JSON-LD Event give the date for free; only the rest need
   // a Claude call to read the date out of the Hebrew text. Keyed by url (chunks
