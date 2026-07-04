@@ -35,7 +35,11 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
   `batsheva-schedule` reads batsheva.co.il's `/schedule/` table directly (DOM
   `data-run-id`/`data-show`/`data-month` attributes give a stable per-occurrence
   id + date; its `/repertory/` pages are evergreen "work" pages with no reliable
-  date and are only used as a poster lookup by slug via the WP REST API).
+  date and are only used as a poster lookup by slug via the WP REST API);
+  `sol-therapy-cloud` reads sol-therapy.com/cloud's `<article class="lp-card">`
+  session grid directly — its only Event JSON-LD is one bogus 3-month summary
+  listing every performer at once, the real per-session dates only exist as
+  plain HTML cards.
   Note: hameretz2's WooCommerce products carry no date anywhere (only in a JS
   ticketing widget) and can't be scraped reliably — use manual upload for it.
 - `scraper/lib/*` — `fetchPage`, `render` (puppeteer), `ai` (Claude), `db`
@@ -57,14 +61,22 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
 - New sites default to the `auto-ladder` strategy. For listing→detail sites use
   `listing-detail-ai` with `config`: `linkPath` (detail path segment, default
   `event`), `keepQuery` (keep `?lang=` on detail URLs — some WPML sites 500
-  without it), `dateRange` (exhibitions whose closing date should keep them
-  visible until they end), `renderDetail` (detail page injects its date via
-  client-side JS — render it instead of a static fetch), `alwaysRefresh` (an
-  evergreen detail page whose URL never changes but whose "next date" text does —
-  skip the known-URL cache and re-check every run; occurrenceKey still dedupes).
+  without it), `renderDetail` (detail page injects its date via client-side JS —
+  render it instead of a static fetch), `alwaysRefresh` (an evergreen detail page
+  whose URL never changes but whose "next date" text does — skip the known-URL
+  cache and re-check every run; occurrenceKey still dedupes). Exhibitions/
+  multi-day runs always keep their closing date as `ends_at` automatically (no
+  config flag needed) in both listing-detail-ai and wp-auto's AI-date fallback.
   AI-batch calls key items by array index, never by URL — long percent-encoded
   Hebrew URLs are opaque enough that the model can echo one back wrong, silently
-  dropping that item.
+  dropping that item. The listing page's own nav links (a menu item that happens
+  to share the linkPath segment, e.g. a "תערוכות" link pointing back at
+  `/exhibitions/`) are excluded from the detail-page set. A poster's lookback
+  window on the listing page is bounded at the previous event link's position,
+  so a compact card grid can't bleed the previous card's image into this one;
+  a detail-page image whose filename matches the post's own title is preferred
+  over a "first non-common image" guess, since a related-posts widget can put
+  another post's photo earlier in the DOM.
 - Categories: event ones (`fringe`/`live`/`galleries`/…) vs directory ones
   (`bars`/`restaurants`/`festival` → info cards). `galleries` = ongoing
   exhibitions, shown only under its own chip. The full whitelist lives in THREE

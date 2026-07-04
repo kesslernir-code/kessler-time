@@ -137,9 +137,18 @@ export async function scrape(source, log = console.error) {
       if (!f?.date) return;
       const [y, mo, d] = f.date.split("-").map(Number);
       const [hh, mm] = (f.time || "20:00").split(":").map(Number);
+      // Exhibitions/multi-day runs: keep the closing date so the event stays
+      // visible until it actually ends, even though it opened in the past
+      // (normalize() keeps an event while its ends_at is in the future).
+      let endsAt = null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(f.end_date || "")) {
+        const [ey, emo, ed] = f.end_date.split("-").map(Number);
+        endsAt = israelISO(ey, emo, ed, 23, 59);
+      }
       events.push({
         ...x.common,
         startsAt: israelISO(y, mo, d, hh, mm),
+        endsAt,
         ...reconcilePrice(f.price_text || x.common.priceText, f.is_free ?? x.common.isFree),
         confidence: 0.8,
       });

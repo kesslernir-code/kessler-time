@@ -5,7 +5,7 @@
 // call extracts time / price / ticket link from its focused text.
 import { fetchText } from "../lib/fetchPage.js";
 import { renderPage } from "../lib/render.js";
-import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink, isJunkImageUrl } from "../lib/util.js";
+import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink, isJunkImageUrl, titlesSimilar } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
 import { knownEventUrls, touchEvents } from "../lib/db.js";
 
@@ -18,11 +18,15 @@ const ilDateOf = (epochSec) =>
 const IMG_BLACKLIST = /logo|icon|favicon|placeholder|blank|spinner|loading|sponsor|footer|header/i;
 const IMG_SRC = /(?:data-lazy-src|data-src|src)="\s*(https?:\/\/[^"\s]+\.(?:jpe?g|png|webp)[^"\s]*)"/g;
 
-/** Poster candidate printed on the listing just before this event's link. */
-function listingImageNear(listing, linkRaw) {
+/** Poster candidate printed on the listing just before this event's link.
+ *  `minIdx` bounds the lookback at the previous event link's position, so a
+ *  compact grid (cards closer together than 2200 chars) can't bleed the
+ *  PREVIOUS card's image into this one — a real bug on hamecarer's tight
+ *  "now showing" grid, where the wrong exhibition's poster got picked. */
+function listingImageNear(listing, linkRaw, minIdx = 0) {
   const idx = listing.indexOf(linkRaw);
   if (idx === -1) return null;
-  const seg = listing.slice(Math.max(0, idx - 2200), idx);
+  const seg = listing.slice(Math.max(0, idx - 2200, minIdx), idx);
   const imgs = [...seg.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u));
   return imgs.pop() || null; // nearest one above the link
 }
@@ -69,16 +73,22 @@ export async function scrape(source, log = console.error) {
   // new date is caught; occurrenceKey (url+date) still dedupes same-date reruns.
   const alwaysRefresh = Boolean(source.config?.alwaysRefresh);
 
-  // Collect event links (+ sd date hint and nearby poster), newest occurrence wins
+  // Collect event links (+ sd date hint and nearby poster), newest occurrence wins.
+  // A nav link back to the listing page itself can share the linkPath segment
+  // (e.g. a "תערוכות" menu item pointing at /exhibitions/) — exclude it.
+  const listingPath = new URL(source.url).pathname.replace(/\/$/, "");
   const found = new Map(); // cleanUrl -> { sd, listImg }
+  let prevLinkEnd = 0;
   for (const m of listing.matchAll(linkRe)) {
     const raw = decodeEntities(m[1]);
     if (!raw.startsWith(base)) continue;
     const u = new URL(raw);
+    if (u.pathname.replace(/\/$/, "") === listingPath) continue;
     const sd = Number(u.searchParams.get("sd")) || null;
     const clean = u.origin + u.pathname + (keepQuery ? u.search : "");
     const prev = found.get(clean) || {};
-    found.set(clean, { sd: prev.sd || sd, listImg: prev.listImg || listingImageNear(listing, m[1]) });
+    found.set(clean, { sd: prev.sd || sd, listImg: prev.listImg || listingImageNear(listing, m[1], prevLinkEnd) });
+    prevLinkEnd = m.index + m[0].length;
   }
   log(`  [${source.id}] listing links: ${found.size}`);
 
@@ -106,9 +116,12 @@ export async function scrape(source, log = console.error) {
       } else {
         html = await fetchText(url, { retries: 0, timeoutMs: 20000 });
       }
-      // decode FIRST so "&#8211;" becomes "–" before we split the site-name suffix off
+      // decode FIRST so "&#8211;" becomes "–" before we split the site-name suffix off.
+      // A bare "-" only counts as a separator surrounded by spaces (WordPress's
+      // default "Title - Site Name") so a hyphenated word inside a real title
+      // (rare, but possible) isn't chopped in half.
       const title = decodeEntities(html.match(/<title>([^<]+)<\/title>/)?.[1] || "")
-        .split(/[–|]/)[0]
+        .split(/\s[-–]\s|\|/)[0]
         .trim();
       const ogImg = (html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)/i) || [])[1] || null;
       details.push({
@@ -132,7 +145,23 @@ export async function scrape(source, log = console.error) {
   const ogShared = new Map(); // an og:image repeated across pages is a site banner, not a poster
   for (const d of details) if (d.ogImg) ogShared.set(d.ogImg, (ogShared.get(d.ogImg) || 0) + 1);
   const ogOk = (u) => u && !isJunkImageUrl(u) && !IMG_BLACKLIST.test(u) && !(details.length >= 3 && (ogShared.get(u) || 0) > details.length * 0.4);
-  for (const d of details) d.image = d.listImg || (ogOk(d.ogImg) ? d.ogImg : null) || d.renderImages?.[0] || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
+  // A "related posts" widget can put another event's thumbnail earlier in the DOM
+  // than the page's own content image (hamecarer's exhibition pages do this) — so
+  // among non-common candidates, prefer one whose filename (WordPress usually names
+  // uploads after the post title) actually matches this event's title.
+  const filenameMatchesTitle = (url, title) => {
+    const name = decodeURIComponent(url).split("/").pop().replace(/\.\w+$/, "").replace(/-\d+x\d+$/, "");
+    return titlesSimilar(name.replace(/[-_]/g, " "), title);
+  };
+  for (const d of details) {
+    // A title match is checked against ALL of the page's images, not just the
+    // non-common ones: a "related exhibitions" widget can make a page's OWN photo
+    // repeat across every other exhibition's page too (hamecarer does this),
+    // which would otherwise get it wrongly flagged as a shared template image.
+    d.image = d.listImg || (ogOk(d.ogImg) ? d.ogImg : null) || d.renderImages?.[0] ||
+      d.detailImgs.find((u) => filenameMatchesTitle(u, d.title)) ||
+      d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
+  }
 
   // Detail pages with a JSON-LD Event give the date for free; only the rest need
   // a Claude call to read the date out of the Hebrew text. Keyed by short numeric

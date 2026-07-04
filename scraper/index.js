@@ -47,6 +47,7 @@ import * as tribeEvents from "./strategies/tribeEvents.js";
 import * as smarticket from "./strategies/smarticket.js";
 import * as shopify from "./strategies/shopify.js";
 import * as batshevaSchedule from "./strategies/batshevaSchedule.js";
+import * as solTherapyCloud from "./strategies/solTherapyCloud.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -64,6 +65,7 @@ const strategies = {
   [smarticket.name]: smarticket,
   [shopify.name]: shopify,
   [batshevaSchedule.name]: batshevaSchedule,
+  [solTherapyCloud.name]: solTherapyCloud,
 };
 
 const args = process.argv.slice(2);
