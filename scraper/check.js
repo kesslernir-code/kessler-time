@@ -19,6 +19,7 @@ import { renderPage, closeBrowser } from "./lib/render.js";
 import { isJunkImageUrl, titlesSimilar, todayISODate } from "./lib/util.js";
 import { rehostImage, ensureBucket, isRehosted } from "./lib/storage.js";
 import { extractEventsFromImages, aiConfigured } from "./lib/ai.js";
+import { fetchCatalog } from "./lib/catalog.js";
 
 if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(0); }
 
@@ -99,6 +100,31 @@ for (const e of needRender) {
   if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedRender++; }
 }
 
+// Rung b2: CATALOG — e-commerce venues (WooCommerce / Shopify) expose a public
+// product catalog where each event's poster is the product image. The date came
+// from the listing, so match the catalog poster onto the dated event by title.
+// Cheap (two JSON calls per site, no render/vision) and reliable — the first
+// choice for any store-backed venue, existing or future.
+let fixedCatalog = 0;
+{
+  const bySite = new Map(); // origin -> imageless events[]
+  for (const e of events) {
+    if (e.image_url || !e.event_url) continue;
+    let origin; try { origin = new URL(e.event_url).origin; } catch { continue; }
+    (bySite.get(origin) || bySite.set(origin, []).get(origin)).push(e);
+  }
+  for (const [origin, evs] of bySite) {
+    let cat; try { cat = await fetchCatalog(origin); } catch { cat = null; }
+    if (!cat) continue;
+    for (const e of evs) {
+      const m = cat.find((c) => titlesSimilar(c.title, e.title));
+      if (!m) continue;
+      let img = (await imageLoads(m.image)) ? m.image : await rehostImage(m.image, e.id);
+      if (img && (await imageLoads(img))) { await updateEvent(e.id, { image_url: img }); e.image_url = img; fixedCatalog++; }
+    }
+  }
+}
+
 // Rung c: VISION — events that all share one listing page (no individual page to
 // scrape, so rungs a/b can't help) are rescued by rendering that listing, reading
 // the posters with Claude vision, and matching each poster to its event by title.
@@ -129,7 +155,7 @@ if (aiConfigured()) {
   }
 }
 await closeBrowser();
-const fixed = fixedOg + fixedRender + fixedVision;
+const fixed = fixedOg + fixedRender + fixedCatalog + fixedVision;
 
 // 1.5 DEDUP — collapse near-duplicate events (same source, same day, similar
 // title) that accumulate across runs when a venue lists an event under slightly
@@ -184,7 +210,7 @@ const warns = qc.filter((q) => q.mark === "warn");
 // REPORT
 console.log(`\n=== HEALTH CHECK ===`);
 console.log(`upcoming events: ${events.length}`);
-console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${fixedVision} vision + ${rehosted} re-hosted)`);
+console.log(`images: ${events.length - noImg.length}/${events.length} loading (${noImg.length} missing; dropped ${junked} junk + ${broke} dead; rescued ${fixedOg} og + ${fixedRender} render + ${fixedCatalog} catalog + ${fixedVision} vision + ${rehosted} re-hosted)`);
 console.log(`deduped: ${deduped} | missing date: ${noDate.length} | missing link: ${noLink.length} | past leaking: ${past.length}`);
 console.log(`per source (events · image · desc · link):`);
 for (const [k, s] of Object.entries(bySrc).sort()) {

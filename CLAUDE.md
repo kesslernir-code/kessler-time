@@ -20,14 +20,21 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
 ## Layout
 - `scraper/index.js` — orchestrator: source → strategy → normalize → dedupe → upsert.
 - `scraper/check.js` — post-scrape QA: drop junk, verify each image loads via the
-  proxy, escalate to rescue missing posters (og → render → **vision**: render the
-  listing and read posters with Claude vision), **re-host** hotlink/proxy-blocked
+  proxy, escalate to rescue missing posters (og → render → **catalog**: match the
+  event to the venue's WooCommerce/Shopify product posters by title, `lib/catalog.js`
+  — this is how e-commerce venues like lauter get images when the date came from a
+  listing → **vision**: render the listing and read posters with Claude vision),
+  **re-host** hotlink/proxy-blocked
   images to Supabase Storage (`lib/storage.js`; levontin7 is force-rehosted),
   **dedup** near-duplicates (same source+day+similar title), and a QC gate
   (per-source coverage flags). listing-detail-ai sources also get last_seen_at
   refreshed here so the 48h stale-prune doesn't delete still-listed events.
 - `scraper/strategies/*` — one per extraction approach (see README table).
-  `smarticket` renders *.smarticket.co.il show cards (e.g. shablul).
+  `smarticket` renders *.smarticket.co.il show cards (e.g. shablul);
+  `shopify` reads a store's products.json (event-as-product venues).
+  Note: sites that delegate event DATES to a JS ticketing widget (hameretz2's
+  dateless WooCommerce products, batsheva's smarticket-only performances) can't be
+  scraped reliably — posters exist but no machine-readable date; use manual upload.
 - `scraper/lib/*` — `fetchPage`, `render` (puppeteer), `ai` (Claude), `db`
   (Supabase REST), `util`.
 - `web/` — static page (`app.js`), admin (`admin.html`), status (`status.html`).
