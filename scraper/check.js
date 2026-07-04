@@ -116,7 +116,7 @@ if (aiConfigured()) {
     if (evs.length < 2) continue;    // only worth it for a real list of events
     triedVision++;
     let posters = [];
-    try { posters = (await renderPage(url, { timeoutMs: 45000, scroll: true })).images.slice(0, 12); } catch { continue; }
+    try { posters = (await renderPage(url, { timeoutMs: 45000, scroll: true })).images.slice(0, 18); } catch { continue; }
     if (!posters.length) continue;
     let read = [];
     try { read = await extractEventsFromImages(posters, { sourceName: evs[0].venue || evs[0].source_id, todayISO: todayISODate() }); } catch { continue; }
