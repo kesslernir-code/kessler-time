@@ -38,6 +38,13 @@ export function inferYear(month, day, now = new Date()) {
   return candidate.getTime() < now.getTime() - 30 * 864e5 ? y + 1 : y;
 }
 
+/** Hebrew month name -> number, shared by strategies that parse "day + Hebrew
+ *  month name" dates off rendered pages (smarticket, batsheva schedule). */
+export const HE_MONTHS = {
+  "ינואר": 1, "פברואר": 2, "מרץ": 3, "אפריל": 4, "מאי": 5, "יוני": 6,
+  "יולי": 7, "אוגוסט": 8, "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12,
+};
+
 /** Decode the handful of HTML entities WordPress actually emits. */
 export function decodeEntities(s = "") {
   return s

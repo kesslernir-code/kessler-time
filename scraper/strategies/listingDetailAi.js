@@ -4,6 +4,7 @@
 // each NEW event's detail page is fetched once and a single batched Claude
 // call extracts time / price / ticket link from its focused text.
 import { fetchText } from "../lib/fetchPage.js";
+import { renderPage } from "../lib/render.js";
 import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink, isJunkImageUrl } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
 import { knownEventUrls, touchEvents } from "../lib/db.js";
@@ -56,6 +57,17 @@ export async function scrape(source, log = console.error) {
   // in the query that must be stripped so occurrences dedupe. config.keepQuery
   // toggles which behaviour applies.
   const keepQuery = Boolean(source.config?.keepQuery);
+  // Some sites inject the actual event date into the DOM via client-side JS (React/
+  // Vue) — a static fetch of the detail page never shows it. config.renderDetail
+  // renders each detail page in a headless browser instead (batsheva's repertory
+  // pages show "המופע הקרוב: <date>" only after hydration).
+  const renderDetail = Boolean(source.config?.renderDetail);
+  // Evergreen detail pages (a permanent page per repertory work, not per-occurrence)
+  // keep the same URL forever while their "next performance" date changes over
+  // time — the normal known-URL skip would freeze the date at whatever it was on
+  // first scrape. config.alwaysRefresh re-fetches every listed page every run so a
+  // new date is caught; occurrenceKey (url+date) still dedupes same-date reruns.
+  const alwaysRefresh = Boolean(source.config?.alwaysRefresh);
 
   // Collect event links (+ sd date hint and nearby poster), newest occurrence wins
   const found = new Map(); // cleanUrl -> { sd, listImg }
@@ -71,12 +83,15 @@ export async function scrape(source, log = console.error) {
   log(`  [${source.id}] listing links: ${found.size}`);
 
   const known = await knownEventUrls(source.id);
-  const fresh = [...found].filter(([url]) => !known.has(url));
+  const fresh = alwaysRefresh ? [...found] : [...found].filter(([url]) => !known.has(url));
   // Events we already have but are still on the listing: refresh their last_seen_at
   // so the stale-prune keeps them. (We skip re-fetching/AI for them to save cost,
-  // but they must not be treated as gone.)
-  const stillListed = [...found.keys()].map((u) => known.get(u)).filter(Boolean);
-  await touchEvents(stillListed);
+  // but they must not be treated as gone.) Skipped for alwaysRefresh sources since
+  // every listed page is re-fetched anyway.
+  if (!alwaysRefresh) {
+    const stillListed = [...found.keys()].map((u) => known.get(u)).filter(Boolean);
+    await touchEvents(stillListed);
+  }
   if (!fresh.length) return [];
   if (!aiConfigured()) throw new Error("ANTHROPIC_API_KEY missing — this source needs AI extraction");
 
@@ -84,19 +99,25 @@ export async function scrape(source, log = console.error) {
   const details = [];
   for (const [url, { sd, listImg }] of fresh) {
     try {
-      const html = await fetchText(url, { retries: 0, timeoutMs: 20000 });
+      let html, renderImages = [];
+      if (renderDetail) {
+        const r = await renderPage(url, { timeoutMs: 30000, scroll: true });
+        html = r.html; renderImages = r.images;
+      } else {
+        html = await fetchText(url, { retries: 0, timeoutMs: 20000 });
+      }
       // decode FIRST so "&#8211;" becomes "–" before we split the site-name suffix off
       const title = decodeEntities(html.match(/<title>([^<]+)<\/title>/)?.[1] || "")
         .split(/[–|]/)[0]
         .trim();
       const ogImg = (html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)/i) || [])[1] || null;
       details.push({
-        url, sd, html, title, listImg, ogImg,
+        url, sd, html, title, listImg, ogImg, renderImages,
         ld: jsonLdEvent(html),
         text: stripHtml(html).slice(0, 1400),
         detailImgs: [...html.matchAll(IMG_SRC)].map((m) => m[1]).filter((u) => !IMG_BLACKLIST.test(u)),
       });
-      await new Promise((r) => setTimeout(r, 250));
+      if (!renderDetail) await new Promise((r) => setTimeout(r, 250));
     } catch (e) {
       log(`  [${source.id}] detail fetch failed: ${url} (${e.message})`);
     }
@@ -111,18 +132,21 @@ export async function scrape(source, log = console.error) {
   const ogShared = new Map(); // an og:image repeated across pages is a site banner, not a poster
   for (const d of details) if (d.ogImg) ogShared.set(d.ogImg, (ogShared.get(d.ogImg) || 0) + 1);
   const ogOk = (u) => u && !isJunkImageUrl(u) && !IMG_BLACKLIST.test(u) && !(details.length >= 3 && (ogShared.get(u) || 0) > details.length * 0.4);
-  for (const d of details) d.image = d.listImg || (ogOk(d.ogImg) ? d.ogImg : null) || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
+  for (const d of details) d.image = d.listImg || (ogOk(d.ogImg) ? d.ogImg : null) || d.renderImages?.[0] || d.detailImgs.find((u) => !isCommon(u)) || d.ld?.image || null;
 
   // Detail pages with a JSON-LD Event give the date for free; only the rest need
-  // a Claude call to read the date out of the Hebrew text. Keyed by url (chunks
-  // of 20 keep each response well under the size limit).
+  // a Claude call to read the date out of the Hebrew text. Keyed by short numeric
+  // index, NOT the url — long percent-encoded Hebrew URLs (e.g. batsheva's
+  // /repertory/%d7%a4%d7%a8...) are opaque enough that the model can echo one back
+  // slightly wrong, silently dropping that item's date on the url.get() miss.
   const needAi = details.filter((d) => !d.ld?.start);
-  const fields = new Map(); // url -> extracted fields
+  const needAiIndex = new Map(needAi.map((d, i) => [d, i]));
+  const fields = new Map(); // index -> extracted fields
   for (let i = 0; i < needAi.length; i += 20) {
     const chunk = needAi.slice(i, i + 20);
     const out = await extractFieldsBatch(
-      chunk.map((d) => ({
-        key: d.url,
+      chunk.map((d, j) => ({
+        key: String(i + j),
         title: d.title,
         text: d.text,
         links: [...d.html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map((m) => m[1]).filter((l) => !l.startsWith(base)).slice(0, 4),
@@ -134,7 +158,7 @@ export async function scrape(source, log = console.error) {
 
   const events = [];
   for (const d of details) {
-    const f = fields.get(d.url) || {};
+    const f = needAiIndex.has(d) ? fields.get(String(needAiIndex.get(d))) || {} : {};
     // Prefer the page's own JSON-LD date (exact, timezone-aware); fall back to the
     // AI-read date, then the listing's sd= stamp.
     let startsAt = null, endsAt = null;

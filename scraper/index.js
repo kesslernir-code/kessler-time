@@ -46,6 +46,7 @@ import * as epgb from "./strategies/epgb.js";
 import * as tribeEvents from "./strategies/tribeEvents.js";
 import * as smarticket from "./strategies/smarticket.js";
 import * as shopify from "./strategies/shopify.js";
+import * as batshevaSchedule from "./strategies/batshevaSchedule.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -62,6 +63,7 @@ const strategies = {
   [tribeEvents.name]: tribeEvents,
   [smarticket.name]: smarticket,
   [shopify.name]: shopify,
+  [batshevaSchedule.name]: batshevaSchedule,
 };
 
 const args = process.argv.slice(2);

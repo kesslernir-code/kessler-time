@@ -20,8 +20,12 @@ async function getBrowser() {
 }
 
 /** Render a page and return its visible text (innerText) and HTML.
- *  `scroll: true` pages down to trigger lazy-loaded images (galleries, posters). */
-export async function renderPage(url, { timeoutMs = 45000, settleMs = 1200, scroll = false } = {}) {
+ *  `scroll: true` pages down to trigger lazy-loaded images (galleries, posters).
+ *  `extract` is an optional serializable function run via page.evaluate() for
+ *  sites where the DOM structure (table rows, list items) is more reliable to
+ *  query directly than to parse back out of flattened text — its return value
+ *  comes back as `data`. */
+export async function renderPage(url, { timeoutMs = 45000, settleMs = 1200, scroll = false, extract = null } = {}) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -49,7 +53,8 @@ export async function renderPage(url, { timeoutMs = 45000, settleMs = 1200, scro
         .sort((a, b) => b.w * b.h - a.w * a.h)
         .map((x) => x.src);
     });
-    return { text, html, images: [...new Set(images)].filter((u) => !isJunkImageUrl(u)) };
+    const data = extract ? await page.evaluate(extract) : null;
+    return { text, html, images: [...new Set(images)].filter((u) => !isJunkImageUrl(u)), data };
   } finally {
     await page.close().catch(() => {});
   }

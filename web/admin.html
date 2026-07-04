@@ -245,7 +245,7 @@
         if (!Array.isArray(rows)) throw new Error("sources table missing — run schema2-sources.sql");
         el.classList.remove("state");
         el.innerHTML = "";
-        const CATS = [["fringe","הופעות שוליים"],["bohemia","בוהמיה"],["festival","פסטיבלים"],["cinema","קולנועים"],["bars","ברים"],["restaurants","מסעדות"],["club","מועדונים"],["secret","סודי"],["other","אחר"]];
+        const CATS = [["fringe","הופעות שוליים"],["live","הופעות חיות"],["bohemia","בוהמיה"],["galleries","גלריות"],["festival","פסטיבלים"],["cinema","קולנועים"],["bars","ברים"],["restaurants","מסעדות"],["club","מועדונים"],["secret","סודי"],["other","אחר"]];
         for (const s of rows) {
           const div = document.createElement("div");
           div.className = "src-row";

@@ -31,10 +31,13 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
   refreshed here so the 48h stale-prune doesn't delete still-listed events.
 - `scraper/strategies/*` — one per extraction approach (see README table).
   `smarticket` renders *.smarticket.co.il show cards (e.g. shablul);
-  `shopify` reads a store's products.json (event-as-product venues).
-  Note: sites that delegate event DATES to a JS ticketing widget (hameretz2's
-  dateless WooCommerce products, batsheva's smarticket-only performances) can't be
-  scraped reliably — posters exist but no machine-readable date; use manual upload.
+  `shopify` reads a store's products.json (event-as-product venues);
+  `batsheva-schedule` reads batsheva.co.il's `/schedule/` table directly (DOM
+  `data-run-id`/`data-show`/`data-month` attributes give a stable per-occurrence
+  id + date; its `/repertory/` pages are evergreen "work" pages with no reliable
+  date and are only used as a poster lookup by slug via the WP REST API).
+  Note: hameretz2's WooCommerce products carry no date anywhere (only in a JS
+  ticketing widget) and can't be scraped reliably — use manual upload for it.
 - `scraper/lib/*` — `fetchPage`, `render` (puppeteer), `ai` (Claude), `db`
   (Supabase REST), `util`.
 - `web/` — static page (`app.js`), admin (`admin.html`), status (`status.html`).
@@ -55,10 +58,21 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
   `listing-detail-ai` with `config`: `linkPath` (detail path segment, default
   `event`), `keepQuery` (keep `?lang=` on detail URLs — some WPML sites 500
   without it), `dateRange` (exhibitions whose closing date should keep them
-  visible until they end).
-- Categories: event ones (`fringe`/`live`/`exhibitions`/`galleries`/…) vs
-  directory ones (`bars`/`restaurants`/`festival` → info cards). `galleries` =
-  ongoing exhibitions, shown only under its own chip.
+  visible until they end), `renderDetail` (detail page injects its date via
+  client-side JS — render it instead of a static fetch), `alwaysRefresh` (an
+  evergreen detail page whose URL never changes but whose "next date" text does —
+  skip the known-URL cache and re-check every run; occurrenceKey still dedupes).
+  AI-batch calls key items by array index, never by URL — long percent-encoded
+  Hebrew URLs are opaque enough that the model can echo one back wrong, silently
+  dropping that item.
+- Categories: event ones (`fringe`/`live`/`galleries`/…) vs directory ones
+  (`bars`/`restaurants`/`festival` → info cards). `galleries` = ongoing
+  exhibitions, shown only under its own chip. The full whitelist lives in THREE
+  places that must stay in sync: `web/app.js` (`CATEGORIES`), `web/admin.html`
+  (two `CATS`/`MCATS` arrays), and the `add_source`/`update_source` Postgres
+  functions (`supabase/schema16-categories-fix.sql` has the current list) —
+  adding a category means updating all three or "Add a site" silently 500s with
+  "bad category".
 - Multi-day events set `ends_at`; `normalize()` keeps an event while its
   `ends_at` is in the future even if it started in the past.
 

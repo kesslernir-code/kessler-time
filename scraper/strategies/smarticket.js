@@ -3,14 +3,9 @@
 // (day + Hebrew month), a title, a short blurb and a per-show link. We render the
 // page and parse the cards. Handles any <venue>.smarticket.co.il site.
 import { renderPage } from "../lib/render.js";
-import { decodeEntities, israelISO, inferYear, shortHash } from "../lib/util.js";
+import { decodeEntities, israelISO, inferYear, shortHash, HE_MONTHS } from "../lib/util.js";
 
 export const name = "smarticket";
-
-const HE_MONTHS = {
-  "ינואר": 1, "פברואר": 2, "מרץ": 3, "אפריל": 4, "מאי": 5, "יוני": 6,
-  "יולי": 7, "אוגוסט": 8, "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12,
-};
 
 export async function scrape(source, log = console.error) {
   const base = new URL(source.url).origin;
