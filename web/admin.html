@@ -11,7 +11,7 @@
     .panel h2 { margin: 0 0 12px; font-size: 17px; }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
     .field label { color: var(--muted); font-size: 13px; }
-    .field input { background: var(--panel-2); border: 1px solid #2c3040; color: var(--text); border-radius: 8px; padding: 9px 12px; font: inherit; }
+    .field input { background: var(--panel-2); border: 1px solid #2c3040; color: var(--text); border-radius: 8px; padding: 9px 12px; font: inherit; color-scheme: dark; }
     .btn { background: var(--accent); color: #14130c; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 700; cursor: pointer; }
     .btn:disabled { opacity: .5; }
     #msg { margin-top: 10px; font-size: 14px; min-height: 20px; }
@@ -67,8 +67,8 @@
     <div id="extractedForm" style="display:none">
       <div class="field"><label>Title</label><input id="evTitle" /></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div class="field" style="flex:1;min-width:130px"><label>Date (YYYY-MM-DD)</label><input id="evDate" placeholder="2025-07-04" /></div>
-        <div class="field" style="flex:1;min-width:100px"><label>Time (HH:MM)</label><input id="evTime" placeholder="21:00" /></div>
+        <div class="field" style="flex:1;min-width:130px"><label id="evDateLabel">Date</label><input type="date" id="evDate" /></div>
+        <div class="field" style="flex:1;min-width:100px"><label>Time</label><input type="time" id="evTime" /></div>
       </div>
       <div class="field"><label>Venue / location</label><input id="evVenue" /></div>
       <div class="field"><label>City (Hebrew)</label><input id="evCity" /></div>
@@ -384,12 +384,22 @@
     }
     $("#extractBtn").onclick = runExtract;
 
+    // Bars/restaurants/festivals are info cards, not dated events — make that
+    // obvious on the field itself instead of only on save-attempt failure.
+    const DIRECTORY = ["bars", "restaurants", "festival"];
+    function updateDateRequirement() {
+      const isDirectory = DIRECTORY.includes($("#evCat").value);
+      $("#evDateLabel").textContent = isDirectory ? "Date (optional — bars/restaurants)" : "Date";
+    }
+    $("#evCat").addEventListener("change", updateDateRequirement);
+    updateDateRequirement();
+
     $("#saveEventBtn").onclick = async () => {
       const msg = $("#uploadMsg");
       const pass = $("#fPass").value;
       const title = $("#evTitle").value.trim();
       const date = $("#evDate").value.trim();
-      const isDirectory = ["bars", "restaurants", "festival"].includes($("#evCat").value);
+      const isDirectory = DIRECTORY.includes($("#evCat").value);
       if (!title) { msg.textContent = "title is required"; msg.style.color = "#ff7a7a"; return; }
       if (!date && !isDirectory) { msg.textContent = "date is required (except bars/restaurants)"; msg.style.color = "#ff7a7a"; return; }
       $("#saveEventBtn").disabled = true;

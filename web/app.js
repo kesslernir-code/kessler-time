@@ -105,6 +105,10 @@
   // load returns (and a fallback if the going_list table doesn't exist yet).
   let going = new Set(JSON.parse(localStorage.getItem("kt-going") || "[]"));
   const cacheGoing = () => localStorage.setItem("kt-going", JSON.stringify([...going]));
+  // "secret" events are gated behind a code, not just a chip — never shown in the
+  // main "All" mix (like galleries), and the filter itself won't switch to it
+  // until the code is entered once (then remembered on this device).
+  let secretUnlocked = localStorage.getItem("kt-secret") === "1";
 
   async function loadGoing() {
     if (!configured) return;
@@ -439,6 +443,8 @@
         !DIRECTORY_CATS.has(e.category || "") &&
         // galleries (ongoing exhibitions) show only under their own chip, not the main mix
         (catSel.has("galleries") || (e.category || "") !== "galleries") &&
+        // secret events never leak into "All" — only when that chip is explicitly active
+        (catSel.has("secret") || (e.category || "") !== "secret") &&
         (!srcSel.size || srcSel.has(e.source_id)) &&
         (!citySel.size || citySel.has(e.city)) &&
         (!catSel.size || catSel.has(e.category || "fringe")) &&
@@ -497,6 +503,12 @@
     });
     for (const c of CATEGORIES) {
       addChip(wrap, t("cat_" + c), catSel.has(c), () => {
+        if (c === "secret" && !secretUnlocked) {
+          const code = prompt(lang === "he" ? "קוד גישה:" : "Access code:");
+          if (code !== "1947") return; // wrong or cancelled — leave the filter untouched
+          secretUnlocked = true;
+          localStorage.setItem("kt-secret", "1");
+        }
         catSel.clear(); catSel.add(c); srcSel.clear(); // place chips belong to the previous category
         renderCatChips(); renderChips(); render();
       }, CAT_COLOR[c] || null);
