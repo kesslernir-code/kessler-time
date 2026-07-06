@@ -26,8 +26,12 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
   listing → **vision**: render the listing and read posters with Claude vision),
   **re-host** hotlink/proxy-blocked
   images to Supabase Storage (`lib/storage.js`; levontin7 is force-rehosted),
-  **dedup** near-duplicates (same source+day+similar title), and a QC gate
-  (per-source coverage flags). listing-detail-ai sources also get last_seen_at
+  **dedup** near-duplicates (same source+day+similar title, OR same source+day
+  where one's event_url is literally its source's own listing/homepage URL —
+  a strategy switch's orphaned old-scheme row often has a wrongly-guessed title
+  that won't text-match its correctly-titled replacement, so title similarity
+  alone misses it), and a QC gate (per-source coverage flags). listing-detail-ai
+  sources also get last_seen_at
   refreshed here so the 48h stale-prune doesn't delete still-listed events.
 - `scraper/strategies/*` — one per extraction approach (see README table).
   `smarticket` renders *.smarticket.co.il show cards (e.g. shablul);

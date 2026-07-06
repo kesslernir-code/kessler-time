@@ -13,7 +13,7 @@
 //   3. QC GATE: per-source image coverage with pass/warn/fail markers, so a
 //      regression surfaces loudly instead of shipping placeholders silently.
 // Usage: node scraper/check.js
-import { dbConfigured, upcomingEvents, updateEvent, deleteEventById, logRun } from "./lib/db.js";
+import { dbConfigured, upcomingEvents, updateEvent, deleteEventById, logRun, getSources } from "./lib/db.js";
 import { fetchOgImage } from "./lib/fetchPage.js";
 import { renderPage, closeBrowser } from "./lib/render.js";
 import { isJunkImageUrl, titlesSimilar, todayISODate } from "./lib/util.js";
@@ -160,6 +160,15 @@ const fixed = fixedOg + fixedRender + fixedCatalog + fixedVision;
 // 1.5 DEDUP — collapse near-duplicate events (same source, same day, similar
 // title) that accumulate across runs when a venue lists an event under slightly
 // varying titles. Keep the most complete; delete the rest.
+// A source's own listing/homepage URL as event_url is a tell that the scraper
+// couldn't resolve a real per-event page (an old strategy's fallback guess) —
+// when a same-day sibling has a genuine distinct event_url, they're the same
+// real event even if the guessed title doesn't textually match at all (this is
+// exactly how a strategy switch leaves an orphaned, wrongly-titled duplicate:
+// e.g. nocturno's old auto-ladder row "הנני" pointing at /live/ vs the new
+// listing-detail-ai row with the real title pointing at /mec-events/cohen0607/).
+const sourceUrls = new Map((await getSources() || []).map((s) => [s.id, s.url]));
+const isGenericUrl = (e) => e.event_url && e.event_url === sourceUrls.get(e.source_id);
 const completeness = (e) => (e.image_url ? 2 : 0) + (e.description ? 1 : 0) + (e.booking_url ? 1 : 0) + (e.price_text ? 1 : 0);
 const dayOf = (iso) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date(iso)); } catch { return ""; } };
 const groups = new Map(); // "source|day" -> events[]
@@ -171,8 +180,11 @@ for (const arr of groups.values()) {
     if (removed.has(arr[i].id)) continue;
     for (let j = i + 1; j < arr.length; j++) {
       if (removed.has(arr[j].id)) continue;
-      if (!titlesSimilar(arr[i].title, arr[j].title)) continue;
-      const drop = completeness(arr[i]) >= completeness(arr[j]) ? arr[j] : arr[i];
+      const sameEvent = titlesSimilar(arr[i].title, arr[j].title) || isGenericUrl(arr[i]) !== isGenericUrl(arr[j]);
+      if (!sameEvent) continue;
+      const drop = isGenericUrl(arr[i]) && !isGenericUrl(arr[j]) ? arr[i]
+        : isGenericUrl(arr[j]) && !isGenericUrl(arr[i]) ? arr[j]
+        : completeness(arr[i]) >= completeness(arr[j]) ? arr[j] : arr[i];
       await deleteEventById(drop.id); removed.add(drop.id); deduped++;
       if (drop.id === arr[i].id) break; // current i removed → advance outer loop
     }
