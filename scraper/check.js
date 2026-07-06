@@ -26,8 +26,13 @@ if (!dbConfigured()) { console.error("check: no SUPABASE config"); process.exit(
 let events = await upcomingEvents();
 
 // The page renders posters through wsrv.nl; if the proxy can't fetch the URL the
-// visitor sees a broken-image placeholder. Verify the URL really resolves to an image.
-const proxy = (u) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=320&h=320&fit=cover&output=webp`;
+// visitor sees a broken-image placeholder. Verify the URL really resolves to an
+// image — using the EXACT same query params as web/app.js's proxyImg(), since
+// wsrv.nl caches per full query string. A mismatched size/quality here means
+// this validation warms a cache entry no real visitor ever requests, so every
+// visitor still hits a cold fetch+transform on wsrv.nl (visible as a blank
+// card for a moment on first load, even though the poster is perfectly fine).
+const proxy = (u) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=640&h=640&fit=cover&output=webp&q=78`;
 const isImg = (r) => r.ok && (r.headers.get("content-type") || "").startsWith("image/");
 async function imageLoads(u) {
   // The page renders posters through the proxy, so that's the real test. Two
