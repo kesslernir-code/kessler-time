@@ -247,7 +247,11 @@
   // are re-hosted into our own Storage by the QC agent, so they load normally.)
   function smartImg(url, title) {
     const im = document.createElement("img");
-    im.loading = "lazy"; im.alt = "";
+    // Not loading="lazy": this isn't an infinite feed (a few hundred events at
+    // most), and native lazy-loading's "is it near the viewport yet" heuristic
+    // has shown up as a real source of blank cards while scrolling — not worth
+    // the bandwidth savings when the whole point is a poster that's just there.
+    im.alt = "";
     im.src = proxyImg(url);
     im.onerror = () => im.replaceWith(...new DOMParser().parseFromString(phHTML(title), "text/html").body.childNodes);
     return im;
