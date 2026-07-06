@@ -47,7 +47,10 @@ pulls events from venue **websites** into Supabase; a static page on Netlify
 - `web/` — static page (`app.js`), admin (`admin.html`), status (`status.html`).
   Public filters are single-select (Date·City·Category·Place, "All" default,
   cascading); the מה כבר בתפריט tab is a SHARED "going" list in the public
-  `going_list` table (anon read+write RLS), synced across devices.
+  `going_list` table (anon read+write RLS), synced across devices. A currently-
+  running multi-day event (exhibition etc., `ends_at` still future though
+  `starts_at` is past) is grouped/sorted as if it started today in the feed —
+  otherwise it looks stuck under a stale date instead of appearing as ongoing.
   Asset URLs are versioned (app.js?v=N) — bump N when web/ changes so phones
   pick it up; html/js/css are served must-revalidate (netlify.toml).
 - `netlify/functions/` — admin-only, password-gated (ADMIN_PW): `extract-event`

@@ -405,9 +405,22 @@
   // Render a day-grouped list of events into #list (shared by the feed and the menu).
   function renderDayGroups(visible) {
     const list = $("#list");
+    const now = Date.now();
+    // A currently-running multi-day event (e.g. an exhibition) keeps its real,
+    // original starts_at in the data — normalize() relies on that to decide it's
+    // still visible at all. But grouping/sorting it under that original date,
+    // days or weeks in the past, makes the feed look stuck on old news. While
+    // it's still actually running (ends_at in the future), treat it as if it
+    // started today for display order only.
+    const effectiveStart = (e) => {
+      const s = Date.parse(e.starts_at);
+      const end = e.ends_at ? Date.parse(e.ends_at) : null;
+      return s < now && end && end > now ? now : s;
+    };
+    const sorted = [...visible].sort((a, b) => effectiveStart(a) - effectiveStart(b));
     let currentDay = null, grid = null;
-    for (const e of visible) {
-      const k = dayKey(e.starts_at);
+    for (const e of sorted) {
+      const k = dayKey(new Date(effectiveStart(e)).toISOString());
       if (k !== currentDay) {
         currentDay = k;
         const { base, rel } = dayLabel(k);

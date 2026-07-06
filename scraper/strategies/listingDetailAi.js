@@ -75,15 +75,22 @@ export async function scrape(source, log = console.error) {
 
   // Collect event links (+ sd date hint and nearby poster), newest occurrence wins.
   // A nav link back to the listing page itself can share the linkPath segment
-  // (e.g. a "תערוכות" menu item pointing at /exhibitions/) — exclude it.
+  // (e.g. a "תערוכות" menu item pointing at /exhibitions/), and so can its own
+  // pagination (/exhibitions/page/2/) — both get treated as bogus "detail pages"
+  // otherwise, one of which produces a fake event titled after the listing itself.
   const listingPath = new URL(source.url).pathname.replace(/\/$/, "");
+  const listingPagingRe = new RegExp(`^${listingPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/page/\\d+$`);
+  const isListingOwnUrl = (pathname) => {
+    const p = pathname.replace(/\/$/, "");
+    return p === listingPath || listingPagingRe.test(p);
+  };
   const found = new Map(); // cleanUrl -> { sd, listImg }
   let prevLinkEnd = 0;
   for (const m of listing.matchAll(linkRe)) {
     const raw = decodeEntities(m[1]);
     if (!raw.startsWith(base)) continue;
     const u = new URL(raw);
-    if (u.pathname.replace(/\/$/, "") === listingPath) continue;
+    if (isListingOwnUrl(u.pathname)) continue;
     const sd = Number(u.searchParams.get("sd")) || null;
     const clean = u.origin + u.pathname + (keepQuery ? u.search : "");
     const prev = found.get(clean) || {};
