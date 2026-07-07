@@ -78,7 +78,16 @@ function parseJsonArray(text) {
   const stripped = text.replace(/^```(json)?/m, "").replace(/```\s*$/m, "");
   const start = stripped.indexOf("[");
   const end = stripped.lastIndexOf("]");
-  if (start === -1 || end === -1) throw new Error(`Claude returned no JSON array: ${text.slice(0, 200)}`);
+  // Claude sometimes answers a plain-language refusal instead of the requested
+  // array when the source text genuinely has nothing extractable (e.g. a
+  // rendered page that's just nav/UI chrome, or a bot-check interstitial) —
+  // that's a valid "0 events this batch", not a scrape failure worth crashing
+  // the whole source over. A malformed array between real brackets is still a
+  // real error and throws below.
+  if (start === -1 || end === -1) {
+    console.error(`  no JSON array in Claude's response (treating as 0 events): ${text.slice(0, 200)}`);
+    return [];
+  }
   return JSON.parse(stripped.slice(start, end + 1));
 }
 

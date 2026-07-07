@@ -248,3 +248,10 @@ if (noImg.length) { console.log(`\nmissing image (first 40):`); noImg.slice(0, 4
 const summary = `${events.length} events · ${noImg.length} no-image · ${junked + broke} bad-img-dropped · ${rehosted} re-hosted · ${deduped} deduped · ${fails.length} src FAIL · ${warns.length} src WARN · rescued ${fixed}`;
 await logRun({ source_id: "health-check", strategy: "check", events_found: events.length, events_upserted: events.length - noImg.length, ok: fails.length === 0, duration_ms: 0, error: summary });
 console.log(`\n${fails.length === 0 ? "✓ QC pass (no source below 50% images)" : `✗ QC: ${fails.length} source(s) below 50% images`}`);
+
+// This is the real "is the site actually degraded" signal — a single venue's
+// transient scrape hiccup (index.js already treats those as non-fatal) says
+// nothing about whether visitors see a broken page, but a source stuck below
+// 50% image coverage does. Fail the CI job (and trigger the alert email) on
+// that basis instead, so an alert means something actionable happened.
+if (fails.length > 0) process.exitCode = 1;

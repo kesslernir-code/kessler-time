@@ -222,8 +222,13 @@ for (const source of sources) {
     run.ok = true;
   } catch (e) {
     run.error = String(e.message || e).slice(0, 500);
-    // HTTP 5xx = venue server temporarily down; don't fail the CI run
-    const transient = /HTTP 5\d\d/.test(run.error);
+    // Don't fail the CI run for one-off venue/API hiccups that self-recover
+    // next run and don't reflect a real code problem: server down (5xx), rate
+    // limiting (429) or bot-blocking (403) a venue applies inconsistently
+    // (e.g. only from the CI runner's IP that hour), a WAF/rate-limit page
+    // served as HTML where JSON was expected (SyntaxError on the parse), or
+    // Anthropic's API being temporarily over capacity.
+    const transient = /HTTP 5\d\d|HTTP 429|HTTP 403|is not valid JSON|overloaded_error/.test(run.error);
     if (!transient) failures++;
     console.error(`${source.id} ${transient ? "WARN" : "FAILED"}: ${run.error}`);
     // Save what we saw for post-mortem (uploaded as a CI artifact on failure)
