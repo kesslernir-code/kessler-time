@@ -242,18 +242,43 @@
   const hue = (s) => PALETTE[[...s].reduce((a, c) => a + c.codePointAt(0), 0) % PALETTE.length];
   const phHTML = (title) => `<div class="ph" style="background:${hue(title || "?")}33">${(title || "?")[0]}</div>`;
 
+  // Manual scroll-position lazy load — not loading="lazy" (its "near enough
+  // to the viewport" heuristic has shown up as a real source of blank cards
+  // that never trigger even after scrolling into view) and not
+  // IntersectionObserver either (same failure mode observed in testing: a
+  // freshly created, already-in-viewport element's observer callback simply
+  // never fired). Eagerly loading every image up front isn't the fix either —
+  // with a few hundred events in the DOM at once, firing that many requests
+  // simultaneously on a phone connection causes real congestion, which looks
+  // identical to the bug (a card stuck blank for a while). Plain
+  // getBoundingClientRect() math on scroll/resize, checked immediately and
+  // then on every scroll, is the most basic, dependency-free mechanism there
+  // is — nothing left to fail silently.
+  const LOAD_MARGIN_PX = 1200;
+  const pendingImgs = new Set();
+  function checkPendingImgs() {
+    if (!pendingImgs.size) return;
+    const bottom = window.innerHeight + LOAD_MARGIN_PX;
+    for (const im of pendingImgs) {
+      if (!im.isConnected) { pendingImgs.delete(im); continue; } // removed by a re-render
+      const r = im.getBoundingClientRect();
+      if (r.bottom < -LOAD_MARGIN_PX || r.top > bottom) continue; // still far off-screen
+      im.src = im.dataset.src;
+      pendingImgs.delete(im);
+    }
+  }
+  window.addEventListener("scroll", checkPendingImgs, { passive: true });
+  window.addEventListener("resize", checkPendingImgs);
+
   // An <img> via the wsrv proxy, falling back to a coloured letter placeholder.
   // (Images that the proxy can't fetch — hotlink-blocked venues like levontin7 —
   // are re-hosted into our own Storage by the QC agent, so they load normally.)
   function smartImg(url, title) {
     const im = document.createElement("img");
-    // Not loading="lazy": this isn't an infinite feed (a few hundred events at
-    // most), and native lazy-loading's "is it near the viewport yet" heuristic
-    // has shown up as a real source of blank cards while scrolling — not worth
-    // the bandwidth savings when the whole point is a poster that's just there.
     im.alt = "";
-    im.src = proxyImg(url);
     im.onerror = () => im.replaceWith(...new DOMParser().parseFromString(phHTML(title), "text/html").body.childNodes);
+    im.dataset.src = proxyImg(url);
+    pendingImgs.add(im);
     return im;
   }
 
@@ -404,6 +429,7 @@
       });
     if (!n) { list.innerHTML = `<div class="state">${t("empty")}</div>`; return; }
     list.appendChild(grid);
+    checkPendingImgs();
   }
 
   // Render a day-grouped list of events into #list (shared by the feed and the menu).
@@ -438,6 +464,7 @@
       }
       grid.appendChild(card(e));
     }
+    checkPendingImgs(); // cards just entered the DOM — see which posters are already in range
   }
 
   function render() {

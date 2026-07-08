@@ -49,6 +49,7 @@ import * as smarticket from "./strategies/smarticket.js";
 import * as shopify from "./strategies/shopify.js";
 import * as batshevaSchedule from "./strategies/batshevaSchedule.js";
 import * as solTherapyCloud from "./strategies/solTherapyCloud.js";
+import * as talAvivMunicipal from "./strategies/talAvivMunicipal.js";
 
 const strategies = {
   [wpEventsApi.name]: wpEventsApi,
@@ -67,6 +68,7 @@ const strategies = {
   [shopify.name]: shopify,
   [batshevaSchedule.name]: batshevaSchedule,
   [solTherapyCloud.name]: solTherapyCloud,
+  [talAvivMunicipal.name]: talAvivMunicipal,
 };
 
 const args = process.argv.slice(2);
