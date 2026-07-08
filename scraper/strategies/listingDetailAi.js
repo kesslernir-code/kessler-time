@@ -7,7 +7,7 @@ import { fetchText } from "../lib/fetchPage.js";
 import { renderPage } from "../lib/render.js";
 import { stripHtml, decodeEntities, israelISO, reconcilePrice, todayISODate, findTicketLink, isJunkImageUrl, titlesSimilar } from "../lib/util.js";
 import { extractFieldsBatch, aiConfigured } from "../lib/ai.js";
-import { knownEventUrls, touchEvents } from "../lib/db.js";
+import { knownEventUrls, touchEvents, updateSourceRow } from "../lib/db.js";
 
 export const name = "listing-detail-ai";
 
@@ -99,8 +99,23 @@ export async function scrape(source, log = console.error) {
   }
   log(`  [${source.id}] listing links: ${found.size}`);
 
+  // A detail page that had NO extractable date last time we checked is very
+  // likely to still have none — a broken ticketing widget or an interstitial
+  // doesn't fix itself between runs. Re-rendering (renderDetail is a real
+  // Puppeteer page load) and re-querying AI for the same dead page every run,
+  // forever, is pure wasted cost. Skip it for a cooldown window instead;
+  // occurrenceKey/known-url logic elsewhere is untouched, so a URL that starts
+  // working again is picked up normally once the cooldown lapses.
+  const NO_DATE_SKIP_HOURS = 48;
+  const noDateSkip = { ...(source.config?.noDateSkip || {}) };
+  const skipForNow = (url) => {
+    const seen = noDateSkip[url];
+    return seen && Date.now() - Date.parse(seen) < NO_DATE_SKIP_HOURS * 3600e3;
+  };
+
   const known = await knownEventUrls(source.id);
-  const fresh = alwaysRefresh ? [...found] : [...found].filter(([url]) => !known.has(url));
+  const fresh = (alwaysRefresh ? [...found] : [...found].filter(([url]) => !known.has(url)))
+    .filter(([url]) => !skipForNow(url));
   // Events we already have but are still on the listing: refresh their last_seen_at
   // so the stale-prune keeps them. (We skip re-fetching/AI for them to save cost,
   // but they must not be treated as gone.) Skipped for alwaysRefresh sources since
@@ -193,6 +208,7 @@ export async function scrape(source, log = console.error) {
   }
 
   const events = [];
+  const noDateUrls = new Set();
   for (const d of details) {
     const f = needAiIndex.has(d) ? fields.get(String(needAiIndex.get(d))) || {} : {};
     // Prefer the page's own JSON-LD date (exact, timezone-aware); fall back to the
@@ -203,7 +219,7 @@ export async function scrape(source, log = console.error) {
       endsAt = d.ld.end;
     } else {
       const date = f.date || (d.sd ? ilDateOf(d.sd) : null);
-      if (!date) continue;
+      if (!date) { noDateUrls.add(d.url); continue; }
       const [y, mo, day] = date.split("-").map(Number);
       const [hh, mm] = (f.time || "20:00").split(":").map(Number);
       startsAt = israelISO(y, mo, day, hh, mm);
@@ -233,6 +249,21 @@ export async function scrape(source, log = console.error) {
       lang: "he",
       confidence: d.ld?.start ? 1.0 : 0.85,
     });
+  }
+
+  // Persist the skip-cache: mark any URL that had no date this run, clear any
+  // that succeeded (in case whatever was broken got fixed), and drop entries
+  // for URLs no longer listed at all so this doesn't grow forever.
+  const checkedUrls = new Set(details.map((d) => d.url));
+  const nextNoDateSkip = {};
+  for (const [url, ts] of Object.entries(noDateSkip)) {
+    if (!found.has(url) || checkedUrls.has(url)) continue; // gone, or re-evaluated below
+    nextNoDateSkip[url] = ts; // still cooling down, untouched this run
+  }
+  const checkedAt = new Date().toISOString();
+  for (const url of noDateUrls) nextNoDateSkip[url] = checkedAt;
+  if (JSON.stringify(nextNoDateSkip) !== JSON.stringify(noDateSkip)) {
+    await updateSourceRow(source.id, { config: { ...source.config, noDateSkip: nextNoDateSkip } }).catch(() => {});
   }
   return events;
 }

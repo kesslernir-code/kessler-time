@@ -2,10 +2,10 @@ name: Scrape events
 
 on:
   schedule:
-    # UTC: 04:00 / 10:00 / 16:00 = 07:00 / 13:00 / 19:00 Israel (summer)
-    - cron: "0 4 * * *"
-    - cron: "0 10 * * *"
-    - cron: "0 16 * * *"
+    # 06:00 UTC = 09:00 Israel (IDT/summer). Cron is fixed UTC — no DST
+    # awareness — so this runs at 10:00 Israel during IST/winter (~late Oct
+    # to late Mar). One scrape a day to keep Anthropic API cost down.
+    - cron: "0 6 * * *"
   workflow_dispatch: {}
 
 jobs:

@@ -4,6 +4,22 @@ const VISION_MODEL = "claude-sonnet-4-6"; // reads event posters — Sonnet for 
 
 export const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY);
 
+// Approximate list-price USD per token, for cost tracking / the per-source
+// overcharge alert only — not exact (ignores prompt-cache discounts etc).
+const PRICE_PER_TOKEN = {
+  [MODEL]: { in: 1 / 1e6, out: 5 / 1e6 },
+  [VISION_MODEL]: { in: 3 / 1e6, out: 15 / 1e6 },
+};
+let totalCostUSD = 0;
+function trackUsage(model, usage) {
+  const p = PRICE_PER_TOKEN[model];
+  if (!p || !usage) return;
+  totalCostUSD += (usage.input_tokens || 0) * p.in + (usage.output_tokens || 0) * p.out;
+}
+/** Running total of estimated AI spend since process start (or the last resetCostUSD()). */
+export const getCostUSD = () => totalCostUSD;
+export const resetCostUSD = () => { totalCostUSD = 0; };
+
 async function ask(prompt, maxTokens = 4000) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -20,6 +36,7 @@ async function ask(prompt, maxTokens = 4000) {
   });
   if (!res.ok) throw new Error(`Claude API ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
+  trackUsage(MODEL, data.usage);
   return data.content.map((b) => b.text || "").join("");
 }
 
@@ -34,7 +51,9 @@ async function askVision(content, maxTokens = 4000) {
     body: JSON.stringify({ model: VISION_MODEL, max_tokens: maxTokens, messages: [{ role: "user", content }] }),
   });
   if (!res.ok) throw new Error(`Claude vision ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return (await res.json()).content.map((b) => b.text || "").join("");
+  const data = await res.json();
+  trackUsage(VISION_MODEL, data.usage);
+  return data.content.map((b) => b.text || "").join("");
 }
 
 /**

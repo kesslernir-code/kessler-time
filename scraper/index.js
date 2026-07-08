@@ -7,6 +7,7 @@ import { dbConfigured, upsertEvents, logRun, getSources, eventsMissingPrice, upd
 import { enrichPrices } from "./lib/enrichPrice.js";
 import { closeBrowser } from "./lib/render.js";
 import { fetchOgImage, fetchPageInfo } from "./lib/fetchPage.js";
+import { getCostUSD } from "./lib/ai.js";
 
 // "Directory" categories: shown as info cards (image/phone/name/description/link),
 // NOT scraped for events.
@@ -170,6 +171,7 @@ const sources = dbSources ?? fileSources;
 console.error(`sources: ${sources.map((s) => s.id).join(", ")} (${dbSources ? "from db" : "from file"})`);
 
 let failures = 0;
+const costBySource = new Map(); // source_id -> estimated USD this run (AI calls only)
 
 for (const source of sources) {
   if (only && source.id !== only) continue;
@@ -191,6 +193,7 @@ for (const source of sources) {
 
   const strategy = strategies[source.strategy];
   const t0 = Date.now();
+  const costBefore = getCostUSD();
   const run = { source_id: source.id, strategy: source.strategy, ok: false, events_found: 0, events_upserted: 0, error: null };
 
   try {
@@ -239,6 +242,7 @@ for (const source of sources) {
   }
 
   run.duration_ms = Date.now() - t0;
+  costBySource.set(source.id, getCostUSD() - costBefore);
   if (!DRY) await logRun(run).catch((e) => console.error(`logRun failed: ${e.message}`));
 }
 
@@ -269,6 +273,24 @@ await closeBrowser();
 // Skipped for single-source runs so a --source scan can't prune everyone else.
 if (!DRY && !only) {
   try { await pruneStaleEvents(48); } catch (e) { console.error(`prune failed: ${e.message}`); }
+}
+
+// Per-source AI cost report + overcharge alert. If one source's estimated AI
+// spend this run is disproportionate (a strategy needing far more Claude calls
+// than its value justifies, or something looping), fail the job so the
+// existing GitHub Actions failure email names it and you can flip it off
+// (sources.enabled = false, editable from admin.html) before it runs again.
+const OVERCHARGE_THRESHOLD_USD = 0.15;
+const costLines = [...costBySource].filter(([, c]) => c > 0.001).sort((a, b) => b[1] - a[1]);
+if (!DRY && costLines.length) {
+  console.error(`\nAI cost this run: $${getCostUSD().toFixed(4)} total (estimated, list price)`);
+  for (const [id, c] of costLines) console.error(`  ${id}: $${c.toFixed(4)}`);
+  const overcharging = costLines.filter(([, c]) => c > OVERCHARGE_THRESHOLD_USD);
+  if (overcharging.length) {
+    console.error(`\n⚠ COST ALERT: source(s) over $${OVERCHARGE_THRESHOLD_USD}/run — consider disabling in admin.html:`);
+    for (const [id, c] of overcharging) console.error(`  ${id}: $${c.toFixed(4)} this run`);
+    process.exitCode = 1;
+  }
 }
 
 if (failures) {
