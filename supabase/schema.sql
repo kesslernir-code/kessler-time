@@ -1,4 +1,4 @@
--- kessler-time schema. Run once in Supabase SQL Editor.
+-- kess-time schema. Run once in Supabase SQL Editor.
 
 create table if not exists events (
   id            text primary key,            -- deterministic: source + occurrence key (re-scrapes upsert, never duplicate)

@@ -68,7 +68,7 @@ export async function extractEventsFromImages(imageUrls, { sourceName, todayISO 
   const fetched = [];
   for (const url of imageUrls) {
     try {
-      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; kessler-time/1.0)" }, signal: AbortSignal.timeout(15000) });
+      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; kess-time/1.0)" }, signal: AbortSignal.timeout(15000) });
       const mediaType = (r.headers.get("content-type") || "").split(";")[0].trim();
       if (!r.ok || !OK_TYPES.has(mediaType)) continue;
       const buf = Buffer.from(await r.arrayBuffer());

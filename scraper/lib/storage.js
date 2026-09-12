@@ -23,7 +23,7 @@ export async function rehostImage(imageUrl, storageKey) {
   if (!url() || !key() || !imageUrl) return null;
   try {
     const r = await fetch(imageUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; kessler-time/1.0)" }, // no Referer → real image, not a hotlink block
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; kess-time/1.0)" }, // no Referer → real image, not a hotlink block
       redirect: "follow",
       signal: AbortSignal.timeout(20000),
     });

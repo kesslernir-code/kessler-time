@@ -13,7 +13,7 @@ export async function handler(event) {
   if (!token) return resp(500, { error: "GH_TOKEN not configured" });
 
   const res = await fetch(
-    "https://api.github.com/repos/kesslernir-code/kessler-time/actions/workflows/scrape.yml/dispatches",
+    "https://api.github.com/repos/kesslernir-code/kess-time/actions/workflows/scrape.yml/dispatches",
     {
       method: "POST",
       headers: {

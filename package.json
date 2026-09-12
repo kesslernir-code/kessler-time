@@ -1,5 +1,5 @@
 {
-  "name": "kessler-time",
+  "name": "kess-time",
   "version": "1.0.0",
   "description": "Personal Tel Aviv / Israel events page — scrapes followed sites into Supabase, served on GitHub Pages",
   "type": "module",

@@ -11,14 +11,14 @@ export async function handler(event) {
     return resp(401, { error: "wrong password" });
   }
 
-  const repo = process.env.GH_REPO; // e.g. kesslernir-code/kessler-time
+  const repo = process.env.GH_REPO; // e.g. kesslernir-code/kess-time
   const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/scrape.yml/dispatches`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.GH_TOKEN}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "kessler-time",
+      "User-Agent": "kess-time",
     },
     body: JSON.stringify({ ref: "main" }),
   });
