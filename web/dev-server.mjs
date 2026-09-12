@@ -2,8 +2,9 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml" };
 
 createServer(async (req, res) => {
